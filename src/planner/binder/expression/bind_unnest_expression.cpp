@@ -23,12 +23,23 @@
 
 namespace duckdb {
 
+static unique_ptr<Expression> BindStructExtract(ClientContext &context, vector<unique_ptr<Expression>> arguments,
+                                                const LogicalType &child_type) {
+	auto result = BindBuiltinScalarExpression(context, StructExtractFun::Name, std::move(arguments));
+	if (result->GetReturnType() != child_type) {
+		// a NULL input is folded into an untyped NULL constant
+		result = BoundCastExpression::AddCastToType(context, std::move(result), child_type);
+	}
+	return result;
+}
+
 static unique_ptr<Expression> CreateBoundStructExtract(ClientContext &context, unique_ptr<Expression> expr,
-                                                       const vector<string> &key_path, bool keep_parent_names) {
+                                                       const LogicalType &child_type, const vector<string> &key_path,
+                                                       bool keep_parent_names) {
 	vector<unique_ptr<Expression>> arguments;
 	arguments.push_back(std::move(expr));
 	arguments.push_back(make_uniq<BoundConstantExpression>(Value(key_path.back())));
-	auto result = BindBuiltinScalarExpression(context, StructExtractFun::Name, std::move(arguments));
+	auto result = BindStructExtract(context, std::move(arguments), child_type);
 
 	if (keep_parent_names) {
 		auto alias = StringUtil::Join(key_path, ".");
@@ -43,11 +54,11 @@ static unique_ptr<Expression> CreateBoundStructExtract(ClientContext &context, u
 }
 
 static unique_ptr<Expression> CreateBoundStructExtractIndex(ClientContext &context, unique_ptr<Expression> expr,
-                                                            idx_t key) {
+                                                            const LogicalType &child_type, idx_t key) {
 	vector<unique_ptr<Expression>> arguments;
 	arguments.push_back(std::move(expr));
 	arguments.push_back(make_uniq<BoundConstantExpression>(Value::BIGINT(int64_t(key))));
-	auto result = BindBuiltinScalarExpression(context, StructExtractFun::Name, std::move(arguments));
+	auto result = BindStructExtract(context, std::move(arguments), child_type);
 
 	result->SetAlias(Identifier("element" + to_string(key)));
 	return result;
@@ -67,8 +78,8 @@ static unique_ptr<Expression> ExpandStructFields(ClientContext &context, unique_
 				auto &child_types = StructType::GetChildTypes(expr->GetReturnType());
 				if (expr->GetReturnType().id() == LogicalTypeId::TUPLE) {
 					for (idx_t child_index = 0; child_index < child_types.size(); child_index++) {
-						new_expressions.push_back(
-						    CreateBoundStructExtractIndex(context, expr->Copy(), child_index + 1));
+						new_expressions.push_back(CreateBoundStructExtractIndex(
+						    context, expr->Copy(), child_types[child_index].second, child_index + 1));
 					}
 				} else {
 					for (auto &entry : child_types) {
@@ -78,8 +89,8 @@ static unique_ptr<Expression> ExpandStructFields(ClientContext &context, unique_
 							current_key_path.emplace_back(expr->GetAlias());
 						}
 						current_key_path.emplace_back(entry.first);
-						new_expressions.push_back(
-						    CreateBoundStructExtract(context, expr->Copy(), current_key_path, keep_parent_names));
+						new_expressions.push_back(CreateBoundStructExtract(context, expr->Copy(), entry.second,
+						                                                   current_key_path, keep_parent_names));
 					}
 				}
 				has_structs = true;
@@ -368,7 +379,8 @@ BindResult UnnestBinder::Bind(FunctionExpression &function, idx_t depth, bool ro
 	    StructType::GetChildCount(unnest_expr->GetReturnType()) == 1) {
 		auto alias = unnest_expr->GetAlias();
 		vector<string> key_path {StructType::GetChildName(unnest_expr->GetReturnType(), 0).GetIdentifierName()};
-		unnest_expr = CreateBoundStructExtract(context, std::move(unnest_expr), key_path, false);
+		auto child_type = StructType::GetChildType(unnest_expr->GetReturnType(), 0);
+		unnest_expr = CreateBoundStructExtract(context, std::move(unnest_expr), child_type, key_path, false);
 		unnest_expr->SetAlias(std::move(alias));
 	}
 	return BindResult(std::move(unnest_expr));
@@ -453,8 +465,8 @@ BindResult SelectBinder::BindStar(StarExpression &expr, idx_t depth, bool root_e
 				return BindResult(std::move(error));
 			}
 		}
-		fields.push_back(tuple ? CreateBoundStructExtractIndex(context, std::move(source), i + 1)
-		                       : CreateBoundStructExtract(context, std::move(source),
+		fields.push_back(tuple ? CreateBoundStructExtractIndex(context, std::move(source), children[i].second, i + 1)
+		                       : CreateBoundStructExtract(context, std::move(source), children[i].second,
 		                                                  {children[i].first.GetIdentifierName()}, false));
 	}
 	return BindResult(make_uniq<BoundExpandedExpression>(std::move(fields)));
