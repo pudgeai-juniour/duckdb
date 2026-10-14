@@ -1220,11 +1220,14 @@ void DependencyManager::ReorderEntries(catalog_entry_vector_t &entries, CatalogT
 	for (auto &entry : entries) {
 		ReorderEntry(transaction, entry, visited, reordered, allow_internal);
 	}
-	// If this would fail, that means there are more entries that we somehow reached through the dependency manager
-	// but those entries should not actually be visible to this transaction
-	D_ASSERT(entries.size() == reordered.size());
+	const catalog_entry_set_t listed(entries.begin(), entries.end());
 	entries.clear();
-	entries = reordered;
+	for (auto &entry : reordered) {
+		if (listed.contains(entry)) {
+			entries.push_back(entry);
+		}
+	}
+	D_ASSERT(entries.size() == listed.size());
 }
 
 void DependencyManager::AlterObject(CatalogTransaction transaction, CatalogEntry &old_obj, CatalogEntry &new_obj,
