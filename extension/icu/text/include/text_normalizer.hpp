@@ -10,6 +10,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <span>
 #include <vector>
 
 namespace duckdb {
@@ -24,7 +25,7 @@ public:
 	                         std::vector<uint32_t> &scratch);
 	static bool IsInert(NormalizationForm form, uint32_t c);
 
-	static void RemoveNonspacingMarks(std::vector<uint32_t> &text);
+	static void RemoveNonspacingMarks(std::vector<uint32_t> &text, std::span<const uint32_t> keep = {});
 	static bool IsNonspacingMark(uint32_t c);
 
 	static bool HasNfkcBoundaryBefore(uint32_t c);

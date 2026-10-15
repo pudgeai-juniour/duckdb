@@ -2,6 +2,12 @@
 
 #include "text_utf8.hpp"
 
+#include "duckdb/common/assert.hpp"
+#include "duckdb/common/helper.hpp"
+
+#include <absl/algorithm/container.h>
+#include <absl/strings/str_cat.h>
+#include <absl/strings/str_join.h>
 #include <algorithm>
 #include <atomic>
 #include <cstring>
@@ -55,6 +61,10 @@ TransformOptions Canonical(TransformOptions options) {
 	if (!options.strip_marks || options.case_mapping == CaseMapping::NONE) {
 		options.strip_before_case = false;
 	}
+	D_ASSERT(options.strip_marks || options.keep_marks.empty());
+	D_ASSERT(absl::c_is_sorted(options.keep_marks));
+	D_ASSERT(absl::c_adjacent_find(options.keep_marks) == options.keep_marks.end());
+	D_ASSERT(absl::c_all_of(options.keep_marks, Normalizer::IsNonspacingMark));
 	return options;
 }
 
@@ -113,7 +123,7 @@ uint16_t TableEntry(uint32_t mapped) {
 
 } // namespace
 
-Transform::Transform(const TransformOptions &options_p) : options(Canonical(options_p)) {
+Transform::Transform(const TransformOptions &options_p, SharedObjectCache &cache) : options(Canonical(options_p)) {
 	renormalize_form = BoundaryForm(options.form);
 	strip_form = options.form == NormalizationForm::NFC || options.form == NormalizationForm::NFD
 	                 ? NormalizationForm::NFD
@@ -121,7 +131,7 @@ Transform::Transform(const TransformOptions &options_p) : options(Canonical(opti
 	composes = IsComposing(options.form);
 	sigma_context = options.case_mapping == CaseMapping::LOWER && options.form != NormalizationForm::NFKC_CF;
 	whole_value = options.case_mapping == CaseMapping::UPPER && options.locale == CaseLocale::GREEK;
-	tables = &GetTables();
+	tables = GetTables(cache);
 
 	bool identity = true;
 	bool lower = true;
@@ -140,21 +150,39 @@ Transform::Transform(const TransformOptions &options_p) : options(Canonical(opti
 	                      : AsciiMode::TABLE;
 }
 
-const Transform::Tables &Transform::GetTables() const {
+void Transform::BuildTables(Tables &built, std::span<const uint32_t> keep) const {
+	TransformBuffer buffer;
+	for (uint32_t c = 0; c < 0x80; c++) {
+		built.ascii[c] = TableEntry(StableMapping(c, buffer, keep));
+		built.two_byte[c] = Tables::UNSTABLE;
+	}
+	for (uint32_t c = 0x80; c < 0x800; c++) {
+		built.two_byte[c] = TableEntry(StableMapping(c, buffer, keep));
+	}
+}
+
+shared_ptr<const Transform::Tables> Transform::GetTables(SharedObjectCache &cache) const {
+	if (options.keep_marks.empty()) {
+		return shared_ptr<const Tables>(shared_ptr<const Tables>(), &GetSlotTables());
+	}
+	const auto key = absl::StrCat(CachedTables::ObjectType(), ":", TablesIndex(options), ":",
+	                              absl::StrJoin(options.keep_marks, ","));
+	auto entry = cache.GetOrBuild<CachedTables>(key, [&] {
+		auto built = make_uniq<CachedTables>();
+		BuildTables(built->tables, options.keep_marks);
+		return built;
+	});
+	return shared_ptr<const Tables>(entry, &entry->tables);
+}
+
+const Transform::Tables &Transform::GetSlotTables() const {
 	static std::atomic<const Tables *> cache[TABLES_COUNT];
 	auto &slot = cache[TablesIndex(options)];
 	if (auto cached = slot.load(std::memory_order_acquire)) {
 		return *cached;
 	}
 	auto built = std::make_unique<Tables>();
-	TransformBuffer buffer;
-	for (uint32_t c = 0; c < 0x80; c++) {
-		built->ascii[c] = TableEntry(StableMapping(c, buffer));
-		built->two_byte[c] = Tables::UNSTABLE;
-	}
-	for (uint32_t c = 0x80; c < 0x800; c++) {
-		built->two_byte[c] = TableEntry(StableMapping(c, buffer));
-	}
+	BuildTables(*built, {});
 	const Tables *expected = nullptr;
 	if (slot.compare_exchange_strong(expected, built.get(), std::memory_order_acq_rel)) {
 		return *built.release();
@@ -189,7 +217,7 @@ Transform::Classified Transform::Classify(const uint8_t *bytes, size_t size, siz
 	return {c, c == REPLACEMENT_CHARACTER || IsWideStable(c) ? c : UNSTABLE};
 }
 
-uint32_t Transform::StableMapping(uint32_t c, TransformBuffer &buffer) const {
+uint32_t Transform::StableMapping(uint32_t c, TransformBuffer &buffer, std::span<const uint32_t> keep) const {
 	if (whole_value || Normalizer::CombiningClass(c) != 0) {
 		return UNSTABLE;
 	}
@@ -204,7 +232,7 @@ uint32_t Transform::StableMapping(uint32_t c, TransformBuffer &buffer) const {
 	if (sigma_context && ContainsCapitalSigma(buffer.text)) {
 		return UNSTABLE;
 	}
-	MapNormalized(buffer, NO_CONTEXT, NO_CONTEXT);
+	MapNormalized(buffer, NO_CONTEXT, NO_CONTEXT, keep);
 	if (buffer.text.size() != 1) {
 		return UNSTABLE;
 	}
@@ -218,14 +246,15 @@ uint32_t Transform::StableMapping(uint32_t c, TransformBuffer &buffer) const {
 	return result;
 }
 
-void Transform::MapNormalized(TransformBuffer &buffer, uint32_t before, uint32_t after) const {
+void Transform::MapNormalized(TransformBuffer &buffer, uint32_t before, uint32_t after,
+                              std::span<const uint32_t> keep) const {
 	if (options.strip_marks && !options.strip_before_case) {
 		MapCase(buffer, before, after);
-		StripMarks(buffer);
+		StripMarks(buffer, keep);
 		return;
 	}
 	if (options.strip_marks) {
-		StripMarks(buffer);
+		StripMarks(buffer, keep);
 	}
 	MapCase(buffer, before, after);
 	if (options.case_mapping != CaseMapping::NONE) {
@@ -233,9 +262,9 @@ void Transform::MapNormalized(TransformBuffer &buffer, uint32_t before, uint32_t
 	}
 }
 
-void Transform::StripMarks(TransformBuffer &buffer) const {
+void Transform::StripMarks(TransformBuffer &buffer, std::span<const uint32_t> keep) const {
 	NormalizeInPlace(strip_form, buffer);
-	Normalizer::RemoveNonspacingMarks(buffer.text);
+	Normalizer::RemoveNonspacingMarks(buffer.text, keep);
 	if (composes) {
 		NormalizeInPlace(renormalize_form, buffer);
 	}
@@ -285,7 +314,7 @@ void Transform::MapCase(TransformBuffer &buffer, uint32_t before, uint32_t after
 size_t Transform::ApplyWhole(std::string_view input, TransformOutput &output, TransformBuffer &buffer) const {
 	Decode(reinterpret_cast<const uint8_t *>(input.data()), 0, input.size(), buffer.text);
 	NormalizeInPlace(options.form, buffer);
-	MapNormalized(buffer, NO_CONTEXT, NO_CONTEXT);
+	MapNormalized(buffer, NO_CONTEXT, NO_CONTEXT, options.keep_marks);
 	size_t needed = 0;
 	for (auto c : buffer.text) {
 		needed += Utf8Length(c);
@@ -431,7 +460,7 @@ size_t Transform::Apply(std::string_view input, TransformOutput &output, Transfo
 			}
 			before = PrecedingContext(out, chunk_output);
 		}
-		MapNormalized(buffer, before, after);
+		MapNormalized(buffer, before, after, options.keep_marks);
 		ensure(4 * buffer.text.size());
 		for (auto mapped : buffer.text) {
 			length += EncodeUtf8(mapped, out + length);

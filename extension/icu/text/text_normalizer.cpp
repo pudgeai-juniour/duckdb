@@ -2,6 +2,7 @@
 
 #include "text_data.hpp"
 
+#include <absl/algorithm/container.h>
 #include <algorithm>
 
 namespace duckdb {
@@ -336,8 +337,8 @@ bool Normalizer::IsNonspacingMark(uint32_t c) {
 	return RangesContain(nonspacing_marks, nonspacing_marks_count, c);
 }
 
-void Normalizer::RemoveNonspacingMarks(std::vector<uint32_t> &text) {
-	text.erase(std::remove_if(text.begin(), text.end(), [](uint32_t c) { return IsNonspacingMark(c); }), text.end());
+void Normalizer::RemoveNonspacingMarks(std::vector<uint32_t> &text, std::span<const uint32_t> keep) {
+	std::erase_if(text, [&](uint32_t c) { return IsNonspacingMark(c) && !absl::c_binary_search(keep, c); });
 }
 
 bool Normalizer::HasNfkcBoundaryBefore(uint32_t c) {
