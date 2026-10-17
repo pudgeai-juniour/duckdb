@@ -11,6 +11,7 @@
 #include "duckdb/catalog/catalog_entry/sequence_catalog_entry.hpp"
 #include "duckdb/common/case_insensitive_map.hpp"
 #include "duckdb/common/common.hpp"
+#include "duckdb/common/optional_idx.hpp"
 
 namespace duckdb {
 
@@ -49,6 +50,8 @@ public:
 	//! The instance's default database as it was when this client connected; later DatabaseManager::SetDefaultDatabase
 	//! calls only affect new clients. Empty when there was none.
 	Identifier default_database;
+	Identifier running_job_catalog;
+	optional_idx running_job_oid;
 
 	//! The file opener of the client context.
 	unique_ptr<FileOpener> file_opener;

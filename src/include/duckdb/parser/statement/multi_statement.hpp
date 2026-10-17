@@ -20,6 +20,7 @@ public:
 	MultiStatement();
 
 	vector<unique_ptr<SQLStatement>> statements;
+	string source_sql;
 
 protected:
 	MultiStatement(const MultiStatement &other);

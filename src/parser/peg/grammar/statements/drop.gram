@@ -14,7 +14,7 @@ DropEntries <-
 	DropJob
 
 DropTrigger <- 'TRIGGER' IfExists? TriggerName 'ON' BaseTableName
-DropJob <- 'JOB' IfExists? List(QualifiedName)
+DropJob <- 'JOB' IfExists? List(QualifiedName)?
 
 DropTable <- TableOrView IfExists? List(BaseTableName)
 DropTableFunction <- CommentMacroTable IfExists? List(TableFunctionName)

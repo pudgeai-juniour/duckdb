@@ -794,6 +794,10 @@ static const TransformFrameOps NONE_LITERAL_OPS = {"NoneLiteral",
 static const TransformFrameOps CREATE_JOB_STMT_OPS = {"CreateJobStmt",
                                                       &PEGTransformerFactory::InitializeCreateJobStmtTrampoline,
                                                       &PEGTransformerFactory::FinalizeCreateJobStmtTrampoline};
+static const TransformFrameOps JOB_BODY_OPS = {"JobBody", &PEGTransformerFactory::InitializeJobBodyTrampoline,
+                                               &PEGTransformerFactory::FinalizeJobBodyTrampoline, true};
+static const TransformFrameOps JOB_SCRIPT_OPS = {"JobScript", &PEGTransformerFactory::InitializeJobScriptTrampoline,
+                                                 &PEGTransformerFactory::FinalizeJobScriptTrampoline};
 static const TransformFrameOps JOB_SCHEDULE_OPS = {"JobSchedule",
                                                    &PEGTransformerFactory::InitializeJobScheduleTrampoline,
                                                    &PEGTransformerFactory::FinalizeJobScheduleTrampoline, true};
@@ -3884,6 +3888,8 @@ PEGTransformerFactory::GeneratedTransformFrameOps() {
 	    {"DefArgStringLiteral", &DEF_ARG_STRING_LITERAL_OPS},
 	    {"NoneLiteral", &NONE_LITERAL_OPS},
 	    {"CreateJobStmt", &CREATE_JOB_STMT_OPS},
+	    {"JobBody", &JOB_BODY_OPS},
+	    {"JobScript", &JOB_SCRIPT_OPS},
 	    {"JobSchedule", &JOB_SCHEDULE_OPS},
 	    {"JobEvery", &JOB_EVERY_OPS},
 	    {"JobAfter", &JOB_AFTER_OPS},
@@ -10085,10 +10091,43 @@ PEGTransformerFactory::FinalizeCreateJobStmtTrampoline(PEGTransformer &transform
 	if (process.child_results[3]) {
 		job_suspended = process.TakeResult<bool>(3);
 	}
-	auto statement = process.TakeResult<unique_ptr<SQLStatement>>(4);
+	auto job_body = process.TakeResult<unique_ptr<SQLStatement>>(4);
 	auto result = TransformCreateJobStmt(transformer, if_not_exists, qualified_name, std::move(job_schedule),
-	                                     job_suspended, std::move(statement));
+	                                     job_suspended, std::move(job_body));
 	return transformer.MakeResult<unique_ptr<CreateStatement>>(std::move(result));
+}
+
+void PEGTransformerFactory::InitializeJobBodyTrampoline(PEGTransformer &transformer,
+                                                        GeneratedTransformProcess &process) {
+	auto &list_pr = process.parse_result.Cast<ListParseResult>();
+	auto &choice_pr = list_pr.Child<ChoiceParseResult>(0);
+	auto &choice_result = choice_pr.GetResult();
+	process.ReserveChildSlots(1);
+	auto child_rule = choice_result.GetRule();
+	auto has_transform_process = child_rule && child_rule->transform_process;
+	if (!has_transform_process) {
+		throw InternalException("No transform process registered for rule '%s'", choice_result.Name());
+	}
+	process.PushChild({*child_rule, choice_result}, 0);
+}
+
+arena_ptr<TransformResultValue> PEGTransformerFactory::FinalizeJobBodyTrampoline(PEGTransformer &transformer,
+                                                                                 GeneratedTransformProcess &process) {
+	auto result = process.TakeResult<unique_ptr<SQLStatement>>(0);
+	return transformer.MakeResult<unique_ptr<SQLStatement>>(std::move(result));
+}
+
+void PEGTransformerFactory::InitializeJobScriptTrampoline(PEGTransformer &transformer,
+                                                          GeneratedTransformProcess &process) {
+	process.ReserveChildSlots(0);
+}
+
+arena_ptr<TransformResultValue> PEGTransformerFactory::FinalizeJobScriptTrampoline(PEGTransformer &transformer,
+                                                                                   GeneratedTransformProcess &process) {
+	auto &list_pr = process.parse_result.Cast<ListParseResult>();
+	auto string_literal = TransformStringLiteral(transformer, list_pr.GetChild(0));
+	auto result = TransformJobScript(transformer, string_literal);
+	return transformer.MakeResult<unique_ptr<SQLStatement>>(std::move(result));
 }
 
 void PEGTransformerFactory::InitializeJobScheduleTrampoline(PEGTransformer &transformer,
@@ -14514,12 +14553,18 @@ PEGTransformerFactory::FinalizeDropTriggerTrampoline(PEGTransformer &transformer
 void PEGTransformerFactory::InitializeDropJobTrampoline(PEGTransformer &transformer,
                                                         GeneratedTransformProcess &process) {
 	auto &list_pr = process.parse_result.Cast<ListParseResult>();
-	auto list_items = ExtractParseResultsFromList(list_pr.GetChild(2));
-	auto dynamic_child_count = list_items.size();
-	process.ReserveChildSlots(2 + dynamic_child_count - 1);
-	for (idx_t i = list_items.size(); i > 0; i--) {
-		auto child_idx = i - 1;
-		process.PushChild({list_items[child_idx].get()}, 1 + child_idx);
+	auto &list_opt = list_pr.GetChild(2).Cast<OptionalParseResult>();
+	idx_t dynamic_child_count = 0;
+	if (list_opt.HasResult()) {
+		auto list_items = ExtractParseResultsFromList(list_opt.GetResult());
+		dynamic_child_count = list_items.size();
+		process.ReserveChildSlots(2 + dynamic_child_count - 1);
+		for (idx_t i = list_items.size(); i > 0; i--) {
+			auto child_idx = i - 1;
+			process.PushChild({list_items[child_idx].get()}, 1 + child_idx);
+		}
+	} else {
+		process.ReserveChildSlots(2 - 1);
 	}
 	auto &if_exists_opt = list_pr.GetChild(1).Cast<OptionalParseResult>();
 	if (if_exists_opt.HasResult()) {
@@ -14530,15 +14575,24 @@ void PEGTransformerFactory::InitializeDropJobTrampoline(PEGTransformer &transfor
 arena_ptr<TransformResultValue> PEGTransformerFactory::FinalizeDropJobTrampoline(PEGTransformer &transformer,
                                                                                  GeneratedTransformProcess &process) {
 	auto &list_pr = process.parse_result.Cast<ListParseResult>();
-	auto dynamic_list_items = ExtractParseResultsFromList(list_pr.GetChild(2));
-	auto dynamic_child_count = dynamic_list_items.size();
+	idx_t dynamic_child_count = 0;
+	auto &dynamic_list_opt = list_pr.GetChild(2).Cast<OptionalParseResult>();
+	if (dynamic_list_opt.HasResult()) {
+		auto dynamic_list_items = ExtractParseResultsFromList(dynamic_list_opt.GetResult());
+		dynamic_child_count = dynamic_list_items.size();
+	}
 	optional<bool> if_exists {};
 	if (process.child_results[0]) {
 		if_exists = process.TakeResult<bool>(0);
 	}
-	vector<QualifiedName> qualified_name;
-	for (idx_t i = 1; i < 1 + dynamic_child_count; i++) {
-		qualified_name.push_back(process.TakeResult<QualifiedName>(i));
+	optional<vector<QualifiedName>> qualified_name {};
+	auto &qualified_name_opt = list_pr.GetChild(2).Cast<OptionalParseResult>();
+	if (qualified_name_opt.HasResult()) {
+		vector<QualifiedName> qualified_name_value;
+		for (idx_t i = 1; i < 1 + dynamic_child_count; i++) {
+			qualified_name_value.push_back(process.TakeResult<QualifiedName>(i));
+		}
+		qualified_name = std::move(qualified_name_value);
 	}
 	auto result = TransformDropJob(transformer, if_exists, qualified_name);
 	return transformer.MakeResult<unique_ptr<DropStatement>>(std::move(result));

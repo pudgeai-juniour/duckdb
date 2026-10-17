@@ -306,6 +306,11 @@ unique_ptr<SQLStatement> PEGTransformerFactory::TransformDropRoleStatement(PEGTr
 	for (auto &name : names) {
 		result->statements.push_back(drop(name.get()));
 	}
+	result->source_sql = (if_not_found == OnEntryNotFound::RETURN_NULL ? "DROP ROLE IF EXISTS " : "DROP ROLE ") +
+	                     StringUtil::Join(result->statements, ", ", [](const unique_ptr<SQLStatement> &statement) {
+		                     return statement->Cast<DropStatement>().info->GetQualifiedName().ToString(
+		                         QualifiedNameToStringMode::HIDE_DEFAULT_SCHEMA);
+	                     });
 	return std::move(result);
 }
 

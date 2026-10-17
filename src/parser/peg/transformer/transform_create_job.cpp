@@ -2,6 +2,7 @@
 #include "duckdb/parser/parsed_data/create_job_info.hpp"
 #include "duckdb/parser/peg/transformer/peg_transformer.hpp"
 #include "duckdb/parser/statement/create_statement.hpp"
+#include "duckdb/parser/statement/multi_statement.hpp"
 
 namespace duckdb {
 
@@ -9,14 +10,21 @@ unique_ptr<CreateStatement>
 PEGTransformerFactory::TransformCreateJobStmt(PEGTransformer &transformer, const optional<bool> &if_not_exists,
                                               const QualifiedName &qualified_name, JobScheduleInfo job_schedule,
                                               const optional<bool> &job_suspended, unique_ptr<SQLStatement> statement) {
-	if (statement->type == StatementType::TRANSACTION_STATEMENT) {
-		throw ParserException("CREATE JOB body cannot be a transaction statement");
-	}
-	if (statement->type == StatementType::MULTI_STATEMENT) {
-		throw ParserException("CREATE JOB body cannot be a statement that runs as several statements");
-	}
+	transformer.PivotEntryCheck("job");
 	if (transformer.ParamCount() > 0) {
 		throw ParserException("CREATE JOB cannot have parameters");
+	}
+	auto check = [](const SQLStatement &part) {
+		if (part.type == StatementType::TRANSACTION_STATEMENT) {
+			throw ParserException("CREATE JOB body cannot be a transaction statement");
+		}
+	};
+	if (CreateJobInfo::IsScript(*statement)) {
+		for (auto &part : statement->Cast<MultiStatement>().statements) {
+			check(*part);
+		}
+	} else {
+		check(*statement);
 	}
 	auto result = make_uniq<CreateStatement>();
 	auto info = make_uniq<CreateJobInfo>();
@@ -27,6 +35,24 @@ PEGTransformerFactory::TransformCreateJobStmt(PEGTransformer &transformer, const
 	info->body = std::move(statement);
 	result->info = std::move(info);
 	return result;
+}
+
+unique_ptr<SQLStatement> PEGTransformerFactory::TransformJobScript(PEGTransformer &transformer,
+                                                                   const string &string_literal) {
+	auto body = CreateJobInfo::ParseBody(string_literal);
+	auto check = [](const SQLStatement &part) {
+		if (!part.named_param_map.empty()) {
+			throw ParserException("CREATE JOB cannot have parameters");
+		}
+	};
+	if (CreateJobInfo::IsScript(*body)) {
+		for (auto &part : body->Cast<MultiStatement>().statements) {
+			check(*part);
+		}
+	} else {
+		check(*body);
+	}
+	return body;
 }
 
 JobScheduleInfo PEGTransformerFactory::TransformJobEvery(PEGTransformer &transformer,
