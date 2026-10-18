@@ -30,10 +30,8 @@ string DropInfo::ToString() const {
 		if (if_not_found == OnEntryNotFound::RETURN_NULL) {
 			result += " IF EXISTS";
 		}
-		auto name = qualified_name.ToString(QualifiedNameToStringMode::HIDE_DEFAULT_SCHEMA);
-		if (!name.empty()) {
-			result += " " + name;
-		}
+		result += " ";
+		result += qualified_name.ToString(QualifiedNameToStringMode::HIDE_DEFAULT_SCHEMA);
 		if (has_func_args) {
 			result += "(";
 			for (idx_t i = 0; i < func_parameters.size(); i++) {

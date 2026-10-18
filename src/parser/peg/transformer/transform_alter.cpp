@@ -67,7 +67,6 @@ unique_ptr<SQLStatement> PEGTransformerFactory::TransformAlterStatement(PEGTrans
 		return std::move(result);
 	}
 
-	auto source_sql = result->ToString();
 	auto alter_entry_data = add_column.GetAlterEntryData();
 	auto column_name = column_entry.GetName();
 	unique_ptr<MultiStatement> multi_statement;
@@ -95,7 +94,6 @@ unique_ptr<SQLStatement> PEGTransformerFactory::TransformAlterStatement(PEGTrans
 		AddToMultiStatement(multi_statement,
 		                    make_uniq<AddConstraintInfo>(alter_entry_data, std::move(unique_constraint)));
 	}
-	multi_statement->source_sql = std::move(source_sql);
 	return std::move(multi_statement);
 }
 

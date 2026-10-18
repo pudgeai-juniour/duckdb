@@ -994,10 +994,7 @@ DefArgKeyword <- ReservedKeyword
 DefArgStringLiteral <- StringLiteral
 NoneLiteral <- 'NONE'
 
-CreateJobStmt <- 'JOB' IfNotExists? QualifiedName JobSchedule JobSuspended? 'AS' JobBody
-
-JobBody <- JobScript / Statement
-JobScript <- StringLiteral
+CreateJobStmt <- 'JOB' IfNotExists? QualifiedName JobSchedule JobSuspended? 'AS' Statement
 
 JobSchedule <- JobEvery / JobAfter
 JobEvery <- 'EVERY' JobInterval JobOffset? JobRandomize? JobConcurrent?
@@ -1358,7 +1355,7 @@ DropEntries <-
 	DropJob
 
 DropTrigger <- 'TRIGGER' IfExists? TriggerName 'ON' BaseTableName
-DropJob <- 'JOB' IfExists? List(QualifiedName)?
+DropJob <- 'JOB' IfExists? List(QualifiedName)
 
 DropTable <- TableOrView IfExists? List(BaseTableName)
 DropTableFunction <- CommentMacroTable IfExists? List(TableFunctionName)

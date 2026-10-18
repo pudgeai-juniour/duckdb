@@ -19,8 +19,6 @@ struct CreateJobInfo : public CreateInfo {
 	CreateJobInfo() : CreateInfo(CatalogType::JOB_ENTRY) {
 	}
 
-	static unique_ptr<SQLStatement> ParseBody(const string &sql);
-	static bool IsScript(const SQLStatement &body);
 	void SetBody(const string &sql);
 
 	JobSchedule schedule;

@@ -3,35 +3,16 @@
 #include "duckdb/common/enum_util.hpp"
 #include "duckdb/common/string_util.hpp"
 #include "duckdb/parser/parser.hpp"
-#include "duckdb/parser/statement/multi_statement.hpp"
 
 namespace duckdb {
 
-unique_ptr<SQLStatement> CreateJobInfo::ParseBody(const string &sql) {
+void CreateJobInfo::SetBody(const string &sql) {
 	auto parser = Parser::GetBuiltinParser();
 	parser.ParseQuery(sql);
-	if (parser.statements.empty()) {
-		throw ParserException("Job body has no statement");
+	if (parser.statements.size() != 1) {
+		throw ParserException("Job body must be a single statement: %s", sql);
 	}
-	for (auto &statement : parser.statements) {
-		if (IsScript(*statement)) {
-			throw ParserException("CREATE JOB body cannot contain a statement that runs as several statements");
-		}
-	}
-	if (parser.statements.size() == 1) {
-		return std::move(parser.statements[0]);
-	}
-	auto script = make_uniq<MultiStatement>();
-	script->statements = std::move(parser.statements);
-	return std::move(script);
-}
-
-bool CreateJobInfo::IsScript(const SQLStatement &body) {
-	return body.type == StatementType::MULTI_STATEMENT && body.Cast<MultiStatement>().source_sql.empty();
-}
-
-void CreateJobInfo::SetBody(const string &sql) {
-	body = ParseBody(sql);
+	body = std::move(parser.statements[0]);
 }
 
 unique_ptr<CreateInfo> CreateJobInfo::Copy() const {
@@ -80,15 +61,7 @@ string CreateJobInfo::ToString() const {
 	if (suspended) {
 		result += " SUSPENDED";
 	}
-	auto text = body->ToString();
-	if (!IsScript(*body)) {
-		return result + " AS " + text + ";";
-	}
-	string tag = "$$";
-	for (idx_t i = 0; text.find(tag) != string::npos; i++) {
-		tag = "$job" + to_string(i) + "$";
-	}
-	return result + " AS " + tag + text + tag + ";";
+	return result + " AS " + body->ToString() + ";";
 }
 
 } // namespace duckdb

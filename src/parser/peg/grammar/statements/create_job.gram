@@ -1,7 +1,4 @@
-CreateJobStmt <- 'JOB' IfNotExists? QualifiedName JobSchedule JobSuspended? 'AS' JobBody
-
-JobBody <- JobScript / Statement
-JobScript <- StringLiteral
+CreateJobStmt <- 'JOB' IfNotExists? QualifiedName JobSchedule JobSuspended? 'AS' Statement
 
 JobSchedule <- JobEvery / JobAfter
 JobEvery <- 'EVERY' JobInterval JobOffset? JobRandomize? JobConcurrent?

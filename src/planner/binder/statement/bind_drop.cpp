@@ -2,7 +2,6 @@
 #include "duckdb/planner/binder.hpp"
 #include "duckdb/planner/operator/logical_drop.hpp"
 #include "duckdb/catalog/catalog.hpp"
-#include "duckdb/catalog/duck_catalog.hpp"
 #include "duckdb/catalog/standard_entry.hpp"
 #include "duckdb/catalog/catalog_entry/macro_catalog_entry.hpp"
 #include "duckdb/catalog/catalog_entry/schema_catalog_entry.hpp"
@@ -10,27 +9,10 @@
 #include "duckdb/parser/parsed_data/drop_info.hpp"
 #include "duckdb/parser/parsed_data/extra_drop_info.hpp"
 #include "duckdb/parser/tableref/basetableref.hpp"
-#include "duckdb/main/client_data.hpp"
 #include "duckdb/main/config.hpp"
 #include "duckdb/storage/storage_extension.hpp"
 
 namespace duckdb {
-
-static void BindRunningJob(ClientContext &context, DropInfo &info) {
-	auto &client_data = ClientData::Get(context);
-	if (!client_data.running_job_oid.IsValid()) {
-		throw BinderException("DROP JOB without a name can only run in the body of a job");
-	}
-	auto &catalog = Catalog::GetCatalog(context, client_data.running_job_catalog);
-	auto transaction = catalog.GetCatalogTransaction(context);
-	auto job =
-	    catalog.Cast<DuckCatalog>().GetOidIndex().GetVisible(client_data.running_job_oid.GetIndex(), transaction.view);
-	if (!job) {
-		throw CatalogException("The job running this statement no longer exists");
-	}
-	info.SetQualifiedName(
-	    QualifiedName::FromCatalogSchema(catalog.GetName(), job->ParentSchemaPath(transaction), job->name));
-}
 
 void Binder::BindDropTrigger(DropStatement &stmt, StatementProperties &properties) {
 	if (!stmt.info->extra_drop_info) {
@@ -54,9 +36,6 @@ BoundStatement Binder::Bind(DropStatement &stmt) {
 	BoundStatement result;
 
 	auto &properties = GetStatementProperties();
-	if (stmt.info->type == CatalogType::JOB_ENTRY && stmt.info->GetQualifiedName().Name().empty()) {
-		BindRunningJob(context, *stmt.info);
-	}
 	switch (stmt.info->type) {
 	case CatalogType::PREPARED_STATEMENT:
 		// dropping prepared statements is always possible

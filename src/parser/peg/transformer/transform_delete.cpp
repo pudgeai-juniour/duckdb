@@ -72,7 +72,6 @@ unique_ptr<SQLStatement> PEGTransformerFactory::TransformTruncateStatement(
 	for (idx_t i = 0; i < truncate_target.size(); i++) {
 		multi->statements.push_back(build_one(truncate_target[i]->Copy()));
 	}
-	multi->source_sql = multi->statements[0]->ToString();
 	return std::move(multi);
 }
 

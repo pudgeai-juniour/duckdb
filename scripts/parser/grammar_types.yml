@@ -60,8 +60,6 @@ SQLStatement:
   by_value: true
   rules:
     - Statement
-    - JobBody
-    - JobScript
     - AlterStatement
     - AnalyzeStatement
     - AttachStatement
