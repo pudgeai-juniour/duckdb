@@ -61,8 +61,6 @@ SourceResultType PhysicalCopyDatabase::GetDataInternal(ExecutionContext &context
 			// Skip for now.
 			break;
 		}
-		case CatalogType::JOB_ENTRY:
-			break;
 		default:
 			throw NotImplementedException("Entry type %s not supported in PhysicalCopyDatabase",
 			                              CatalogTypeToString(create_info->type));

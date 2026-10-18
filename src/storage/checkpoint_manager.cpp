@@ -52,6 +52,8 @@
 #include "duckdb/storage/table_storage_load.hpp"
 #include "duckdb/storage/storage_extension.hpp"
 
+#include <absl/algorithm/container.h>
+
 namespace duckdb {
 
 ActiveCheckpointWrapper::ActiveCheckpointWrapper(optional_ptr<ClientContext> context, AttachedDatabase &db_p,
@@ -542,11 +544,8 @@ void WriteCatalogEntries(WriteAheadLog &log, DuckCatalog &catalog) {
 		auto &declared = owner.Cast<StandardEntry>().dependencies;
 		for (auto &owned_ref : dependencies.OwnedEntries(committed, owner)) {
 			auto &owned = owned_ref.get();
-			const auto implied =
-			    std::any_of(declared.Set().begin(), declared.Set().end(), [&](const LogicalDependency &dep) {
-				    return dep.owned_by && dep.entry.type == owned.type && dep.entry.name == owned.name &&
-				           dep.entry.schema_path == owned.ParentSchemaPath();
-			    });
+			const auto implied = absl::c_any_of(
+			    declared.Set(), [&](const LogicalDependency &dep) { return dep.owned_by && dep.Refers(owned); });
 			if (implied) {
 				continue;
 			}

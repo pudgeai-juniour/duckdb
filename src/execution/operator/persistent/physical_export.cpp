@@ -19,6 +19,8 @@
 #include "duckdb/catalog/duck_catalog.hpp"
 #include "duckdb/catalog/dependency_manager.hpp"
 
+#include <absl/algorithm/container.h>
+
 #include <algorithm>
 #include <sstream>
 
@@ -172,9 +174,19 @@ struct ExportedEntry {
 	OwnedEntriesExport owned;
 };
 
+struct PendingRename {
+	catalog_entry_vector_t after;
+	string sql;
+};
+
+struct ExportPlan {
+	catalog_entry_map_t<catalog_entry_vector_t> written_after;
+	reference_set_t<CatalogEntry> created_by_target;
+	vector<PendingRename> renames;
+};
+
 static void WriteCatalogEntries(stringstream &ss, catalog_entry_vector_t &entries,
-                                catalog_entry_map_t<ExportedEntry> &exported,
-                                const reference_set_t<CatalogEntry> &skip) {
+                                catalog_entry_map_t<ExportedEntry> &exported, ExportPlan &plan) {
 	unordered_map<idx_t, QualifiedName> user_types;
 	for (auto &entry : entries) {
 		if (entry.get().type == CatalogType::TYPE_ENTRY && !entry.get().internal) {
@@ -182,8 +194,9 @@ static void WriteCatalogEntries(stringstream &ss, catalog_entry_vector_t &entrie
 		}
 	}
 	string at_end;
+	reference_set_t<CatalogEntry> written;
 	for (auto &entry : entries) {
-		if (entry.get().internal || skip.contains(entry.get())) {
+		if (entry.get().internal || plan.created_by_target.contains(entry.get())) {
 			continue;
 		}
 		auto &exported_entry = exported.at(entry);
@@ -231,6 +244,17 @@ static void WriteCatalogEntries(stringstream &ss, catalog_entry_vector_t &entrie
 		WriteComments(ss, entry.get());
 		ss << exported_entry.owned.after_owner;
 		at_end += exported_entry.owned.at_end;
+		written.insert(entry.get());
+		std::erase_if(plan.renames, [&](const PendingRename &rename) {
+			if (!absl::c_all_of(rename.after, [&](CatalogEntry &after) { return written.contains(after); })) {
+				return false;
+			}
+			ss << rename.sql;
+			return true;
+		});
+	}
+	for (auto &rename : plan.renames) {
+		ss << rename.sql;
 	}
 	ss << at_end;
 	ss << '\n';
@@ -385,45 +409,39 @@ static catalog_entry_map_t<ExportedEntry> ExportedEntries(ClientContext &context
 	return result;
 }
 
-static catalog_entry_map_t<reference<CatalogEntry>> WrittenAfter(catalog_entry_vector_t &entries,
-                                                                 const catalog_entry_map_t<ExportedEntry> &exported) {
-	catalog_entry_map_t<reference<CatalogEntry>> result;
+static ExportPlan PlanExport(catalog_entry_vector_t &entries, const catalog_entry_map_t<ExportedEntry> &exported) {
+	ExportPlan plan;
 	vector<pair<reference<CatalogEntry>, reference<const RecreatedEntry>>> recreated;
 	for (auto &owner : entries) {
-		for (auto &entry : exported.at(owner).owned.recreated) {
-			result.emplace(entry.entry, owner);
-			recreated.emplace_back(owner, entry);
+		if (owner.get().type == CatalogType::SCHEMA_ENTRY &&
+		    owner.get().name == owner.get().ParentCatalog().GetDefaultSchema()) {
+			plan.created_by_target.insert(owner.get());
+		}
+		for (auto &created : exported.at(owner).owned.recreated) {
+			plan.created_by_target.insert(created.entry.get());
+			auto &after = plan.written_after[created.entry];
+			after.push_back(owner);
+			after.insert(after.end(), created.after.begin(), created.after.end());
+			if (!created.rename.empty()) {
+				plan.renames.push_back({after, created.rename});
+			}
+			recreated.emplace_back(owner, created);
 		}
 	}
 	for (auto &entry : entries) {
-		if (result.contains(entry)) {
+		if (plan.created_by_target.contains(entry.get())) {
 			continue;
 		}
 		for (auto &[owner, created] : recreated) {
 			auto &created_entry = created.get().entry.get();
 			if (created_entry.type == entry.get().type && created.get().name == entry.get().name &&
 			    created_entry.ParentSchemaOid() == entry.get().ParentSchemaOid()) {
-				result.emplace(entry, owner);
+				plan.written_after[entry].push_back(owner);
 				break;
 			}
 		}
 	}
-	return result;
-}
-
-static reference_set_t<CatalogEntry> CreatedByTarget(catalog_entry_vector_t &entries,
-                                                     const catalog_entry_map_t<ExportedEntry> &exported) {
-	reference_set_t<CatalogEntry> result;
-	for (auto &entry : entries) {
-		if (entry.get().type == CatalogType::SCHEMA_ENTRY &&
-		    entry.get().name == entry.get().ParentCatalog().GetDefaultSchema()) {
-			result.insert(entry.get());
-		}
-		for (auto &recreated : exported.at(entry).owned.recreated) {
-			result.insert(recreated.entry.get());
-		}
-	}
-	return result;
+	return plan;
 }
 
 static void AddEntries(catalog_entry_vector_t &all_entries, catalog_entry_vector_t &to_add) {
@@ -486,14 +504,15 @@ SourceResultType PhysicalExport::GetDataInternal(ExecutionContext &context, Data
 	catalog_entry_vector_t catalog_entries;
 	catalog_entries = GetNaiveExportOrder(context.client, catalog);
 	auto exported = ExportedEntries(ccontext, catalog_entries);
+	auto plan = PlanExport(catalog_entries, exported);
 	auto dependency_manager = catalog.GetDependencyManager();
 	if (dependency_manager) {
-		dependency_manager->ReorderEntries(catalog_entries, ccontext, WrittenAfter(catalog_entries, exported));
+		dependency_manager->ReorderEntries(catalog_entries, ccontext, plan.written_after);
 	}
 
 	// write the schema.sql file
 	stringstream ss;
-	WriteCatalogEntries(ss, catalog_entries, exported, CreatedByTarget(catalog_entries, exported));
+	WriteCatalogEntries(ss, catalog_entries, exported, plan);
 	WriteStringStreamToFile(fs, ss, fs.JoinPath(info->file_path, "schema.sql"));
 
 	// write the load.sql file

@@ -147,8 +147,7 @@ unique_ptr<CreateInfo> TableCatalogEntry::GetInfo() const {
 static optional_ptr<const ColumnDefinition> OwningColumn(const TableCatalogEntry &table, const CatalogEntry &owned) {
 	auto &columns = table.GetColumns();
 	for (auto &dependency : table.dependencies.Set()) {
-		if (dependency.entry.type != owned.type || dependency.entry.name != owned.name ||
-		    dependency.entry.schema_path != owned.ParentSchemaPath()) {
+		if (!dependency.Refers(owned)) {
 			continue;
 		}
 		for (auto &column : columns.Logical()) {
@@ -170,14 +169,18 @@ OwnedEntriesExport TableCatalogEntry::ExportOwnedEntries(ClientContext &context,
 	if (!dependencies) {
 		return result;
 	}
+	const bool writes_ownership = catalog.Compatibility() == SqlCompatibility::POSTGRES;
 	for (auto &owned_ref : dependencies->OwnedEntries(catalog.GetCatalogTransaction(context), *this)) {
 		auto &owned = owned_ref.get();
 		if (NumbersRowsWith(owned)) {
-			result.recreated.push_back({owned, owned.name});
+			result.recreated.push_back({owned, owned.name, {}, {}});
+			continue;
+		}
+		if (!writes_ownership || owned.internal) {
 			continue;
 		}
 		auto column = OwningColumn(*this, owned);
-		if (owned.internal || !column || catalog.Compatibility() != SqlCompatibility::POSTGRES) {
+		if (!column) {
 			continue;
 		}
 		ChangeOwnershipInfo ownership(

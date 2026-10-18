@@ -132,6 +132,8 @@ public:
 struct RecreatedEntry {
 	reference<CatalogEntry> entry;
 	Identifier name;
+	vector<reference<CatalogEntry>> after;
+	string rename;
 };
 
 struct OwnedEntriesExport {
