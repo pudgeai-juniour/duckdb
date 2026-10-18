@@ -66,6 +66,10 @@ unique_ptr<CreateInfo> CatalogEntry::GetInfo() const {
 	throw InternalException("Unsupported type for CatalogEntry::GetInfo!");
 }
 
+OwnedEntriesExport CatalogEntry::ExportOwnedEntries(ClientContext &context, CreateInfo &info) {
+	return {};
+}
+
 string CatalogEntry::ToSQL() const {
 	throw InternalException({{"catalog_type", CatalogTypeToString(type)}}, "Unsupported catalog type for ToSQL()");
 }

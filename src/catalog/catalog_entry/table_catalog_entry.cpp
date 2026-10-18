@@ -1,6 +1,7 @@
 #include "duckdb/catalog/catalog_entry/table_catalog_entry.hpp"
 
 #include "duckdb/catalog/catalog.hpp"
+#include "duckdb/catalog/dependency_manager.hpp"
 #include "duckdb/catalog/catalog_entry/duck_table_entry.hpp"
 #include "duckdb/catalog/catalog_entry/schema_catalog_entry.hpp"
 #include "duckdb/common/algorithm.hpp"
@@ -141,6 +142,52 @@ unique_ptr<CreateInfo> TableCatalogEntry::GetInfo() const {
 	result->comment = comment;
 	result->tags = tags;
 	return std::move(result);
+}
+
+static optional_ptr<const ColumnDefinition> OwningColumn(const TableCatalogEntry &table, const CatalogEntry &owned) {
+	auto &columns = table.GetColumns();
+	for (auto &dependency : table.dependencies.Set()) {
+		if (dependency.entry.type != owned.type || dependency.entry.name != owned.name ||
+		    dependency.entry.schema_path != owned.ParentSchemaPath()) {
+			continue;
+		}
+		for (auto &column : columns.Logical()) {
+			if (dependency.subdependencies.contains(SubDependency {AlterTableType::SET_DEFAULT, column.Name()})) {
+				return column;
+			}
+		}
+	}
+	if (columns.LogicalColumnCount() == 0) {
+		return nullptr;
+	}
+	return columns.GetColumn(LogicalIndex(0));
+}
+
+OwnedEntriesExport TableCatalogEntry::ExportOwnedEntries(ClientContext &context, CreateInfo &info) {
+	OwnedEntriesExport result;
+	auto &catalog = ParentCatalog();
+	auto dependencies = catalog.GetDependencyManager();
+	if (!dependencies) {
+		return result;
+	}
+	for (auto &owned_ref : dependencies->OwnedEntries(catalog.GetCatalogTransaction(context), *this)) {
+		auto &owned = owned_ref.get();
+		if (NumbersRowsWith(owned)) {
+			result.recreated.push_back({owned, owned.name});
+			continue;
+		}
+		auto column = OwningColumn(*this, owned);
+		if (owned.internal || !column || catalog.Compatibility() != SqlCompatibility::POSTGRES) {
+			continue;
+		}
+		ChangeOwnershipInfo ownership(
+		    owned.type,
+		    AlterEntryData(QualifiedName(owned.ParentSchemaPath(), owned.name), OnEntryNotFound::THROW_EXCEPTION),
+		    Identifier(), Identifier());
+		ownership.owner_path = {name, column->Name()};
+		result.at_end += ownership.ToString() + "\n";
+	}
+	return result;
 }
 
 string TableCatalogEntry::ColumnsToSQL(const ColumnList &columns, const vector<unique_ptr<Constraint>> &constraints) {

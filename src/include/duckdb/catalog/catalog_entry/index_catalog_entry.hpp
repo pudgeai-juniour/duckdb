@@ -18,11 +18,6 @@ namespace duckdb {
 
 struct DataTableInfo;
 
-struct OwnedJobsExport {
-	string after_index;
-	string at_end;
-};
-
 //! An index catalog entry
 class IndexCatalogEntry : public StandardEntry {
 public:
@@ -69,9 +64,6 @@ public:
 	virtual bool ScanColumnSegmentInfo(const QueryContext &context, ColumnSegmentInfoScanState &state,
 	                                   vector<ColumnSegmentInfo> &result) const {
 		return false;
-	}
-	virtual OwnedJobsExport ExportOwnedJobs(ClientContext &context, CreateIndexInfo &info) {
-		return {};
 	}
 
 	//! Returns true, if this index is UNIQUE
