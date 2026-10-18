@@ -1,7 +1,10 @@
 #include "duckdb/catalog/job_schedule.hpp"
 #include "duckdb/execution/expression_executor.hpp"
 #include "duckdb/main/client_context.hpp"
+#include "duckdb/parser/parsed_data/bound_pragma_info.hpp"
 #include "duckdb/parser/parsed_data/create_job_info.hpp"
+#include "duckdb/parser/statement/explain_statement.hpp"
+#include "duckdb/parser/statement/pragma_statement.hpp"
 #include "duckdb/planner/binder.hpp"
 #include "duckdb/planner/expression_binder/constant_binder.hpp"
 
@@ -36,9 +39,28 @@ void Binder::BindJobSchedule(JobSchedule &schedule, unique_ptr<JobScheduleInfo> 
 	parsed_schedule.reset();
 }
 
+static void CheckJobBody(Binder &binder, ClientContext &context, SQLStatement &body) {
+	auto &statement = body.type == StatementType::EXPLAIN_STATEMENT ? *body.Cast<ExplainStatement>().stmt : body;
+	if (statement.type == StatementType::TRANSACTION_STATEMENT) {
+		throw ParserException("CREATE JOB body cannot be a transaction statement");
+	}
+	if (statement.type == StatementType::MULTI_STATEMENT) {
+		throw ParserException("CREATE JOB body cannot be a statement that runs as several statements");
+	}
+	if (statement.type == StatementType::PRAGMA_STATEMENT) {
+		auto &pragma = statement.Cast<PragmaStatement>();
+		auto info = pragma.info->Copy();
+		auto bound = Binder::CreateBinder(context, &binder)->BindPragma(*info, QueryErrorContext(pragma.stmt_location));
+		if (bound->function.query) {
+			throw ParserException("CREATE JOB body cannot be a statement that runs as other statements");
+		}
+	}
+}
+
 SchemaCatalogEntry &Binder::BindCreateJobInfo(CreateJobInfo &info) {
 	auto &schema = BindCreateSchema(info);
 	BindJobSchedule(info.schedule, info.parsed_schedule);
+	CheckJobBody(*this, context, *info.body);
 	info.SetBody(info.body->ToString());
 	return schema;
 }
