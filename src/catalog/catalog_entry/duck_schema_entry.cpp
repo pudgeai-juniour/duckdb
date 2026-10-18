@@ -406,9 +406,9 @@ optional_ptr<CatalogEntry> DuckSchemaEntry::CreateSequence(CatalogTransaction tr
 	auto sequence = make_uniq<SequenceCatalogEntry>(catalog, *this, info);
 	auto result = AddEntry(transaction, std::move(sequence), info.on_conflict);
 	if (result && !info.owned_by.empty()) {
-		ChangeOwnershipInfo ownership(CatalogType::SEQUENCE_ENTRY, catalog.GetName(), name, result->name, Identifier(),
-		                              Identifier(), OnEntryNotFound::THROW_EXCEPTION);
-		ownership.SetQualifiedName(GetQualifiedName(result->name));
+		ChangeOwnershipInfo ownership(CatalogType::SEQUENCE_ENTRY,
+		                              AlterEntryData(GetQualifiedName(result->name), OnEntryNotFound::THROW_EXCEPTION),
+		                              Identifier(), Identifier());
 		ownership.owner_path = info.owned_by;
 		if (catalog.Compatibility() != SqlCompatibility::POSTGRES) {
 			auto owner =

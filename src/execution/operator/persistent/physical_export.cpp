@@ -205,9 +205,10 @@ static void WriteOwnedSequences(stringstream &ss, ClientContext &context, TableC
 		if (!column) {
 			continue;
 		}
-		ChangeOwnershipInfo ownership(CatalogType::SEQUENCE_ENTRY, Identifier(), Identifier(), owned.name,
-		                              Identifier(), Identifier(), OnEntryNotFound::THROW_EXCEPTION);
-		ownership.SetQualifiedName(QualifiedName(owned.ParentSchemaPath(), owned.name));
+		ChangeOwnershipInfo ownership(
+		    CatalogType::SEQUENCE_ENTRY,
+		    AlterEntryData(QualifiedName(owned.ParentSchemaPath(), owned.name), OnEntryNotFound::THROW_EXCEPTION),
+		    Identifier(), Identifier());
 		ownership.owner_path = {table.name, column->Name()};
 		ss << ownership.ToString() << '\n';
 	}
@@ -416,7 +417,7 @@ void PhysicalExport::ExtractEntries(ClientContext &context, vector<reference<Sch
 }
 
 static catalog_entry_map_t<reference<CatalogEntry>> CreatedByOwner(ClientContext &context,
-                                                                  catalog_entry_vector_t &entries) {
+                                                                   catalog_entry_vector_t &entries) {
 	catalog_entry_map_t<reference<CatalogEntry>> result;
 	for (auto &entry : entries) {
 		auto &owner = entry.get();
@@ -543,7 +544,8 @@ SourceResultType PhysicalExport::GetDataInternal(ExecutionContext &context, Data
 	const auto by_owner = CreatedByOwner(ccontext, catalog_entries);
 	auto dependency_manager = catalog.GetDependencyManager();
 	if (dependency_manager) {
-		dependency_manager->ReorderEntries(catalog_entries, ccontext, WrittenAfter(ccontext, catalog_entries, by_owner));
+		dependency_manager->ReorderEntries(catalog_entries, ccontext,
+		                                   WrittenAfter(ccontext, catalog_entries, by_owner));
 	}
 
 	// write the schema.sql file

@@ -283,8 +283,8 @@ unique_ptr<AlterInfo> PEGTransformerFactory::TransformSetSequenceOption(
 			auto &owner = owned_by->qualified_name;
 			auto schema =
 			    owner.Name().empty() || !owner.Schema().empty() ? owner.Schema() : Identifier::DefaultSchema();
-			auto ownership = make_uniq<ChangeOwnershipInfo>(CatalogType::SEQUENCE_ENTRY, "", "", "", schema,
-			                                                owner.Name(), OnEntryNotFound::THROW_EXCEPTION);
+			auto ownership =
+			    make_uniq<ChangeOwnershipInfo>(CatalogType::SEQUENCE_ENTRY, AlterEntryData(), schema, owner.Name());
 			for (auto &part : owner.Path()) {
 				if (!part.empty()) {
 					ownership->owner_path.push_back(part);
