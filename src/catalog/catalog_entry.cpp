@@ -66,8 +66,8 @@ unique_ptr<CreateInfo> CatalogEntry::GetInfo() const {
 	throw InternalException("Unsupported type for CatalogEntry::GetInfo!");
 }
 
-OwnedEntriesExport CatalogEntry::ExportOwnedEntries(ClientContext &context, CreateInfo &info) {
-	return {};
+unique_ptr<CreateInfo> CatalogEntry::GetInfo(CatalogTransaction transaction) const {
+	return GetInfo();
 }
 
 string CatalogEntry::ToSQL() const {

@@ -32,7 +32,6 @@ class Value;
 struct AlterInfo;
 struct CatalogTransaction;
 struct CreateInfo;
-struct OwnedEntriesExport;
 
 //! Abstract base class of an entry in the catalog
 class CatalogEntry {
@@ -83,8 +82,8 @@ public:
 	virtual unique_ptr<CatalogEntry> Copy(ClientContext &context) const;
 
 	virtual unique_ptr<CreateInfo> GetInfo() const;
+	virtual unique_ptr<CreateInfo> GetInfo(CatalogTransaction transaction) const;
 	unique_ptr<CreateInfo> GetSerializedInfo() const;
-	virtual OwnedEntriesExport ExportOwnedEntries(ClientContext &context, CreateInfo &info);
 
 	//! Sets the CatalogEntry as the new root entry (i.e. the newest entry)
 	virtual void SetAsRoot(optional_ptr<CatalogTransaction> transaction, optional_ptr<CatalogEntry> previous);
@@ -127,19 +126,6 @@ public:
 		DynamicCastCheck<TARGET>(this);
 		return reinterpret_cast<const TARGET &>(*this);
 	}
-};
-
-struct RecreatedEntry {
-	reference<CatalogEntry> entry;
-	Identifier name;
-	vector<reference<CatalogEntry>> after;
-	string rename;
-};
-
-struct OwnedEntriesExport {
-	vector<RecreatedEntry> recreated;
-	string after_owner;
-	string at_end;
 };
 
 class InCatalogEntry : public CatalogEntry {

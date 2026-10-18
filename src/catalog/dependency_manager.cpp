@@ -139,7 +139,7 @@ DependencyInfo DependencyInfo::FromDependent(DependencyEntry &dep) {
 
 // ----------- DEPENDENCY_MANAGER -----------
 
-bool DependencyManager::IsSystemEntry(CatalogEntry &entry) const {
+bool DependencyManager::IsSystemEntry(const CatalogEntry &entry) const {
 	if (entry.internal) {
 		return true;
 	}
@@ -1479,7 +1479,7 @@ void DependencyManager::Scan(
 	}
 }
 
-catalog_entry_vector_t DependencyManager::OwnedEntries(CatalogTransaction transaction, CatalogEntry &owner) {
+catalog_entry_vector_t DependencyManager::OwnedEntries(CatalogTransaction transaction, const CatalogEntry &owner) {
 	catalog_entry_vector_t result;
 	if (IsSystemEntry(owner)) {
 		return result;

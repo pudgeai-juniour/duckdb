@@ -11,6 +11,9 @@
 #include "duckdb/parallel/pipeline.hpp"
 #include "duckdb/parser/expression/type_expression.hpp"
 #include "duckdb/parser/keyword_helper.hpp"
+#include "duckdb/parser/parsed_data/alter_job_info.hpp"
+#include "duckdb/parser/parsed_data/alter_table_info.hpp"
+#include "duckdb/parser/parsed_data/create_job_info.hpp"
 #include "duckdb/parser/parsed_data/create_macro_info.hpp"
 #include "duckdb/parser/parsed_data/create_sequence_info.hpp"
 #include "duckdb/parser/parsed_data/create_table_info.hpp"
@@ -169,11 +172,6 @@ static string SequenceSetval(const CreateSequenceInfo &info, const QualifiedName
 	       (is_called ? "true" : "false") + ");\n";
 }
 
-struct ExportedEntry {
-	unique_ptr<CreateInfo> info;
-	OwnedEntriesExport owned;
-};
-
 struct PendingRename {
 	catalog_entry_vector_t after;
 	string sql;
@@ -182,25 +180,25 @@ struct PendingRename {
 struct ExportPlan {
 	catalog_entry_map_t<catalog_entry_vector_t> written_after;
 	reference_set_t<CatalogEntry> created_by_target;
+	catalog_entry_map_t<string> after_owner;
 	vector<PendingRename> renames;
+	string at_end;
 };
 
-static void WriteCatalogEntries(stringstream &ss, catalog_entry_vector_t &entries,
-                                catalog_entry_map_t<ExportedEntry> &exported, ExportPlan &plan) {
+static void WriteCatalogEntries(stringstream &ss, CatalogTransaction transaction, catalog_entry_vector_t &entries,
+                                ExportPlan &plan) {
 	unordered_map<idx_t, QualifiedName> user_types;
 	for (auto &entry : entries) {
 		if (entry.get().type == CatalogType::TYPE_ENTRY && !entry.get().internal) {
 			user_types.emplace(entry.get().oid, QualifiedName(entry.get().ParentSchemaPath(), entry.get().name));
 		}
 	}
-	string at_end;
 	reference_set_t<CatalogEntry> written;
 	for (auto &entry : entries) {
 		if (entry.get().internal || plan.created_by_target.contains(entry.get())) {
 			continue;
 		}
-		auto &exported_entry = exported.at(entry);
-		auto &create_info = exported_entry.info;
+		auto create_info = entry.get().GetInfo(transaction);
 		if (create_info->type == CatalogType::TABLE_ENTRY) {
 			auto &columns = create_info->Cast<CreateTableInfo>().columns;
 			for (idx_t i = 0; i < columns.LogicalColumnCount(); i++) {
@@ -242,8 +240,10 @@ static void WriteCatalogEntries(stringstream &ss, catalog_entry_vector_t &entrie
 		ss << '\n';
 		ss << setval;
 		WriteComments(ss, entry.get());
-		ss << exported_entry.owned.after_owner;
-		at_end += exported_entry.owned.at_end;
+		auto after_owner = plan.after_owner.find(entry);
+		if (after_owner != plan.after_owner.end()) {
+			ss << after_owner->second;
+		}
 		written.insert(entry.get());
 		std::erase_if(plan.renames, [&](const PendingRename &rename) {
 			if (!absl::c_all_of(rename.after, [&](CatalogEntry &after) { return written.contains(after); })) {
@@ -256,7 +256,7 @@ static void WriteCatalogEntries(stringstream &ss, catalog_entry_vector_t &entrie
 	for (auto &rename : plan.renames) {
 		ss << rename.sql;
 	}
-	ss << at_end;
+	ss << plan.at_end;
 	ss << '\n';
 }
 
@@ -399,45 +399,110 @@ void PhysicalExport::ExtractEntries(ClientContext &context, vector<reference<Sch
 	}
 }
 
-static catalog_entry_map_t<ExportedEntry> ExportedEntries(ClientContext &context, catalog_entry_vector_t &entries) {
-	catalog_entry_map_t<ExportedEntry> result;
-	for (auto &entry : entries) {
-		auto info = entry.get().GetInfo();
-		auto owned = entry.get().ExportOwnedEntries(context, *info);
-		result.emplace(entry, ExportedEntry {std::move(info), std::move(owned)});
-	}
-	return result;
+static AlterJobInfo AlterOwnedJob(AlterJobType type, const CatalogEntry &job, const Identifier &name) {
+	return AlterJobInfo(type,
+	                    AlterEntryData(QualifiedName(job.ParentSchemaPath(), name), OnEntryNotFound::THROW_EXCEPTION));
 }
 
-static ExportPlan PlanExport(catalog_entry_vector_t &entries, const catalog_entry_map_t<ExportedEntry> &exported) {
+static Identifier FreeJobName(CatalogTransaction transaction, SchemaCatalogEntry &schema, CatalogType owner_type,
+                              const CatalogEntry &job) {
+	auto name = job.name.GetIdentifierName() + "_" + to_string(job.oid);
+	while (schema.GetEntry(transaction, CatalogType::JOB_ENTRY, Identifier(name)) ||
+	       schema.GetEntry(transaction, owner_type, Identifier(name))) {
+		name += "_";
+	}
+	return Identifier(name);
+}
+
+static void PlanOwnedJob(CatalogTransaction transaction, ExportPlan &plan, CatalogEntry &owner, CatalogEntry &job) {
+	plan.created_by_target.insert(job);
+	auto &after = plan.written_after[job];
+	after.push_back(owner);
+	auto info = job.GetInfo();
+	auto &job_info = info->Cast<CreateJobInfo>();
+	auto &statements = plan.after_owner[owner];
+	auto job_name = owner.name;
+	if (job.name != owner.name) {
+		auto &schema = job.ParentSchema(transaction);
+		auto named_like_owner = schema.GetEntry(transaction, CatalogType::JOB_ENTRY, owner.name);
+		if (named_like_owner) {
+			plan.written_after[*named_like_owner].push_back(owner);
+		}
+		auto taken = schema.GetEntry(transaction, owner.type, job.name);
+		job_name = taken ? FreeJobName(transaction, schema, owner.type, job) : job.name;
+		auto rename = AlterOwnedJob(AlterJobType::RENAME, job, owner.name);
+		rename.new_name = job_name;
+		statements += rename.ToString() + "\n";
+		if (taken) {
+			after.push_back(*taken);
+			auto finish = AlterOwnedJob(AlterJobType::RENAME, job, job_name);
+			finish.new_name = job.name;
+			plan.renames.push_back({after, finish.ToString() + "\n"});
+		}
+	}
+	auto reschedule = AlterOwnedJob(AlterJobType::SET_SCHEDULE, job, job_name);
+	reschedule.schedule = job_info.schedule;
+	statements += reschedule.ToString() + "\n";
+	if (job_info.suspended) {
+		statements += AlterOwnedJob(AlterJobType::SUSPEND, job, job_name).ToString() + "\n";
+	}
+}
+
+static optional_ptr<const ColumnDefinition> OwningColumn(const TableCatalogEntry &table, const CatalogEntry &owned) {
+	auto &columns = table.GetColumns();
+	for (auto &dependency : table.dependencies.Set()) {
+		if (!dependency.Refers(owned)) {
+			continue;
+		}
+		for (auto &column : columns.Logical()) {
+			if (dependency.subdependencies.contains(SubDependency {AlterTableType::SET_DEFAULT, column.Name()})) {
+				return column;
+			}
+		}
+	}
+	if (columns.LogicalColumnCount() == 0) {
+		return nullptr;
+	}
+	return columns.GetColumn(LogicalIndex(0));
+}
+
+static void PlanOwnedByTable(ExportPlan &plan, TableCatalogEntry &table, CatalogEntry &owned) {
+	if (table.NumbersRowsWith(owned)) {
+		plan.created_by_target.insert(owned);
+		plan.written_after[owned].push_back(table);
+		return;
+	}
+	if (table.ParentCatalog().Compatibility() != SqlCompatibility::POSTGRES || owned.internal) {
+		return;
+	}
+	auto column = OwningColumn(table, owned);
+	if (!column) {
+		return;
+	}
+	ChangeOwnershipInfo ownership(
+	    owned.type,
+	    AlterEntryData(QualifiedName(owned.ParentSchemaPath(), owned.name), OnEntryNotFound::THROW_EXCEPTION),
+	    Identifier(), Identifier());
+	ownership.owner_path = {table.name, column->Name()};
+	plan.at_end += ownership.ToString() + "\n";
+}
+
+static ExportPlan PlanExport(CatalogTransaction transaction, Catalog &catalog, const catalog_entry_vector_t &entries) {
 	ExportPlan plan;
-	vector<pair<reference<CatalogEntry>, reference<const RecreatedEntry>>> recreated;
+	auto dependency_manager = catalog.GetDependencyManager();
 	for (auto &owner : entries) {
 		if (owner.get().type == CatalogType::SCHEMA_ENTRY &&
 		    owner.get().name == owner.get().ParentCatalog().GetDefaultSchema()) {
 			plan.created_by_target.insert(owner.get());
 		}
-		for (auto &created : exported.at(owner).owned.recreated) {
-			plan.created_by_target.insert(created.entry.get());
-			auto &after = plan.written_after[created.entry];
-			after.push_back(owner);
-			after.insert(after.end(), created.after.begin(), created.after.end());
-			if (!created.rename.empty()) {
-				plan.renames.push_back({after, created.rename});
-			}
-			recreated.emplace_back(owner, created);
-		}
-	}
-	for (auto &entry : entries) {
-		if (plan.created_by_target.contains(entry.get())) {
+		if (!dependency_manager) {
 			continue;
 		}
-		for (auto &[owner, created] : recreated) {
-			auto &created_entry = created.get().entry.get();
-			if (created_entry.type == entry.get().type && created.get().name == entry.get().name &&
-			    created_entry.ParentSchemaOid() == entry.get().ParentSchemaOid()) {
-				plan.written_after[entry].push_back(owner);
-				break;
+		for (auto &owned : dependency_manager->OwnedEntries(transaction, owner)) {
+			if (owned.get().type == CatalogType::JOB_ENTRY) {
+				PlanOwnedJob(transaction, plan, owner, owned);
+			} else if (owner.get().type == CatalogType::TABLE_ENTRY) {
+				PlanOwnedByTable(plan, owner.get().Cast<TableCatalogEntry>(), owned);
 			}
 		}
 	}
@@ -503,8 +568,8 @@ SourceResultType PhysicalExport::GetDataInternal(ExecutionContext &context, Data
 
 	catalog_entry_vector_t catalog_entries;
 	catalog_entries = GetNaiveExportOrder(context.client, catalog);
-	auto exported = ExportedEntries(ccontext, catalog_entries);
-	auto plan = PlanExport(catalog_entries, exported);
+	auto transaction = catalog.GetCatalogTransaction(ccontext);
+	auto plan = PlanExport(transaction, catalog, catalog_entries);
 	auto dependency_manager = catalog.GetDependencyManager();
 	if (dependency_manager) {
 		dependency_manager->ReorderEntries(catalog_entries, ccontext, plan.written_after);
@@ -512,7 +577,7 @@ SourceResultType PhysicalExport::GetDataInternal(ExecutionContext &context, Data
 
 	// write the schema.sql file
 	stringstream ss;
-	WriteCatalogEntries(ss, catalog_entries, exported, plan);
+	WriteCatalogEntries(ss, transaction, catalog_entries, plan);
 	WriteStringStreamToFile(fs, ss, fs.JoinPath(info->file_path, "schema.sql"));
 
 	// write the load.sql file

@@ -142,7 +142,6 @@ public:
 	virtual bool NumbersRowsWith(const CatalogEntry &sequence) const {
 		return false;
 	}
-	OwnedEntriesExport ExportOwnedEntries(ClientContext &context, CreateInfo &info) override;
 
 	DUCKDB_API static string ColumnsToSQL(const ColumnList &columns, const vector<unique_ptr<Constraint>> &constraints);
 

@@ -99,7 +99,7 @@ public:
 
 	void AddOwnership(CatalogTransaction transaction, CatalogEntry &owner, CatalogEntry &entry);
 	void RemoveOwnership(CatalogTransaction transaction, CatalogEntry &entry);
-	catalog_entry_vector_t OwnedEntries(CatalogTransaction transaction, CatalogEntry &owner);
+	catalog_entry_vector_t OwnedEntries(CatalogTransaction transaction, const CatalogEntry &owner);
 
 	//! Get the order of entries needed by EXPORT, the objects with no dependencies are exported first
 	void ReorderEntries(catalog_entry_vector_t &entries);
@@ -120,7 +120,7 @@ private:
 	case_insensitive_set_t foreign_catalogs;
 
 private:
-	bool IsSystemEntry(CatalogEntry &entry) const;
+	bool IsSystemEntry(const CatalogEntry &entry) const;
 	optional_ptr<CatalogEntry> LookupEntry(CatalogTransaction transaction, CatalogEntry &dependency);
 	optional_ptr<CatalogEntry> LookupEntry(CatalogTransaction transaction, const CatalogEntryInfo &info);
 	//! Look up a trigger dependency through the table it is defined on
