@@ -22,8 +22,6 @@
 #include "duckdb/catalog/duck_catalog.hpp"
 #include "duckdb/catalog/dependency_manager.hpp"
 
-#include <absl/algorithm/container.h>
-
 #include <algorithm>
 #include <sstream>
 
@@ -172,31 +170,95 @@ static string SequenceSetval(const CreateSequenceInfo &info, const QualifiedName
 	       (is_called ? "true" : "false") + ");\n";
 }
 
-struct PendingRename {
-	catalog_entry_vector_t after;
-	string sql;
-};
+static bool CreatedByOwner(CatalogEntry &owner, CatalogEntry &owned) {
+	return owned.type == CatalogType::JOB_ENTRY ||
+	       (owner.type == CatalogType::TABLE_ENTRY && owner.Cast<TableCatalogEntry>().NumbersRowsWith(owned));
+}
 
-struct ExportPlan {
-	catalog_entry_map_t<catalog_entry_vector_t> written_after;
-	reference_set_t<CatalogEntry> created_by_target;
-	catalog_entry_map_t<string> after_owner;
-	vector<PendingRename> renames;
-	string at_end;
-};
+static AlterJobInfo AlterJob(AlterJobType type, const CatalogEntry &job, const Identifier &name) {
+	return AlterJobInfo(type,
+	                    AlterEntryData(QualifiedName(job.ParentSchemaPath(), name), OnEntryNotFound::THROW_EXCEPTION));
+}
+
+static void WriteJobState(stringstream &ss, const CatalogEntry &owner, const CatalogEntry &job) {
+	if (job.name != owner.name) {
+		auto rename = AlterJob(AlterJobType::RENAME, job, owner.name);
+		rename.new_name = job.name;
+		ss << rename.ToString() << '\n';
+	}
+	auto info = job.GetInfo();
+	auto &job_info = info->Cast<CreateJobInfo>();
+	auto reschedule = AlterJob(AlterJobType::SET_SCHEDULE, job, job.name);
+	reschedule.schedule = job_info.schedule;
+	ss << reschedule.ToString() << '\n';
+	if (job_info.suspended) {
+		ss << AlterJob(AlterJobType::SUSPEND, job, job.name).ToString() << '\n';
+	}
+}
+
+static optional_ptr<const ColumnDefinition> OwningColumn(const TableCatalogEntry &table, const CatalogEntry &owned) {
+	auto &columns = table.GetColumns();
+	for (auto &dependency : table.dependencies.Set()) {
+		if (!dependency.Refers(owned)) {
+			continue;
+		}
+		for (auto &column : columns.Logical()) {
+			if (dependency.subdependencies.contains(SubDependency {AlterTableType::SET_DEFAULT, column.Name()})) {
+				return column;
+			}
+		}
+	}
+	if (columns.LogicalColumnCount() == 0) {
+		return nullptr;
+	}
+	return columns.GetColumn(LogicalIndex(0));
+}
+
+static void WriteOwnedBy(stringstream &ss, const TableCatalogEntry &table, const CatalogEntry &owned) {
+	if (table.ParentCatalog().Compatibility() != SqlCompatibility::POSTGRES || owned.internal) {
+		return;
+	}
+	auto column = OwningColumn(table, owned);
+	if (!column) {
+		return;
+	}
+	ChangeOwnershipInfo ownership(
+	    owned.type,
+	    AlterEntryData(QualifiedName(owned.ParentSchemaPath(), owned.name), OnEntryNotFound::THROW_EXCEPTION),
+	    Identifier(), Identifier());
+	ownership.owner_path = {table.name, column->Name()};
+	ss << ownership.ToString() << '\n';
+}
+
+static void WriteOwnedEntries(stringstream &ss, DependencyManager &dependencies, CatalogTransaction transaction,
+                              CatalogEntry &owner) {
+	for (auto &owned : dependencies.OwnedEntries(transaction, owner)) {
+		if (owned.get().type == CatalogType::JOB_ENTRY) {
+			WriteJobState(ss, owner, owned);
+		} else if (owner.type == CatalogType::TABLE_ENTRY && !CreatedByOwner(owner, owned)) {
+			WriteOwnedBy(ss, owner.Cast<TableCatalogEntry>(), owned);
+		}
+	}
+}
 
 static void WriteCatalogEntries(stringstream &ss, CatalogTransaction transaction, catalog_entry_vector_t &entries,
-                                ExportPlan &plan) {
+                                optional_ptr<DependencyManager> dependencies) {
 	unordered_map<idx_t, QualifiedName> user_types;
 	for (auto &entry : entries) {
 		if (entry.get().type == CatalogType::TYPE_ENTRY && !entry.get().internal) {
 			user_types.emplace(entry.get().oid, QualifiedName(entry.get().ParentSchemaPath(), entry.get().name));
 		}
 	}
-	reference_set_t<CatalogEntry> written;
 	for (auto &entry : entries) {
-		if (entry.get().internal || plan.created_by_target.contains(entry.get())) {
+		if (entry.get().internal || (entry.get().type == CatalogType::SCHEMA_ENTRY &&
+		                             entry.get().name == entry.get().ParentCatalog().GetDefaultSchema())) {
 			continue;
+		}
+		if (dependencies) {
+			auto owner = dependencies->OwnerOf(transaction, entry);
+			if (owner && CreatedByOwner(*owner, entry)) {
+				continue;
+			}
 		}
 		auto create_info = entry.get().GetInfo(transaction);
 		if (create_info->type == CatalogType::TABLE_ENTRY) {
@@ -240,23 +302,10 @@ static void WriteCatalogEntries(stringstream &ss, CatalogTransaction transaction
 		ss << '\n';
 		ss << setval;
 		WriteComments(ss, entry.get());
-		auto after_owner = plan.after_owner.find(entry);
-		if (after_owner != plan.after_owner.end()) {
-			ss << after_owner->second;
+		if (dependencies) {
+			WriteOwnedEntries(ss, *dependencies, transaction, entry);
 		}
-		written.insert(entry.get());
-		std::erase_if(plan.renames, [&](const PendingRename &rename) {
-			if (!absl::c_all_of(rename.after, [&](CatalogEntry &after) { return written.contains(after); })) {
-				return false;
-			}
-			ss << rename.sql;
-			return true;
-		});
 	}
-	for (auto &rename : plan.renames) {
-		ss << rename.sql;
-	}
-	ss << plan.at_end;
 	ss << '\n';
 }
 
@@ -399,116 +448,6 @@ void PhysicalExport::ExtractEntries(ClientContext &context, vector<reference<Sch
 	}
 }
 
-static AlterJobInfo AlterOwnedJob(AlterJobType type, const CatalogEntry &job, const Identifier &name) {
-	return AlterJobInfo(type,
-	                    AlterEntryData(QualifiedName(job.ParentSchemaPath(), name), OnEntryNotFound::THROW_EXCEPTION));
-}
-
-static Identifier FreeJobName(CatalogTransaction transaction, SchemaCatalogEntry &schema, CatalogType owner_type,
-                              const CatalogEntry &job) {
-	auto name = job.name.GetIdentifierName() + "_" + to_string(job.oid);
-	while (schema.GetEntry(transaction, CatalogType::JOB_ENTRY, Identifier(name)) ||
-	       schema.GetEntry(transaction, owner_type, Identifier(name))) {
-		name += "_";
-	}
-	return Identifier(name);
-}
-
-static void PlanOwnedJob(CatalogTransaction transaction, ExportPlan &plan, CatalogEntry &owner, CatalogEntry &job) {
-	plan.created_by_target.insert(job);
-	auto &after = plan.written_after[job];
-	after.push_back(owner);
-	auto info = job.GetInfo();
-	auto &job_info = info->Cast<CreateJobInfo>();
-	auto &statements = plan.after_owner[owner];
-	auto job_name = owner.name;
-	if (job.name != owner.name) {
-		auto &schema = job.ParentSchema(transaction);
-		auto named_like_owner = schema.GetEntry(transaction, CatalogType::JOB_ENTRY, owner.name);
-		if (named_like_owner) {
-			plan.written_after[*named_like_owner].push_back(owner);
-		}
-		auto taken = schema.GetEntry(transaction, owner.type, job.name);
-		job_name = taken ? FreeJobName(transaction, schema, owner.type, job) : job.name;
-		auto rename = AlterOwnedJob(AlterJobType::RENAME, job, owner.name);
-		rename.new_name = job_name;
-		statements += rename.ToString() + "\n";
-		if (taken) {
-			after.push_back(*taken);
-			auto finish = AlterOwnedJob(AlterJobType::RENAME, job, job_name);
-			finish.new_name = job.name;
-			plan.renames.push_back({after, finish.ToString() + "\n"});
-		}
-	}
-	auto reschedule = AlterOwnedJob(AlterJobType::SET_SCHEDULE, job, job_name);
-	reschedule.schedule = job_info.schedule;
-	statements += reschedule.ToString() + "\n";
-	if (job_info.suspended) {
-		statements += AlterOwnedJob(AlterJobType::SUSPEND, job, job_name).ToString() + "\n";
-	}
-}
-
-static optional_ptr<const ColumnDefinition> OwningColumn(const TableCatalogEntry &table, const CatalogEntry &owned) {
-	auto &columns = table.GetColumns();
-	for (auto &dependency : table.dependencies.Set()) {
-		if (!dependency.Refers(owned)) {
-			continue;
-		}
-		for (auto &column : columns.Logical()) {
-			if (dependency.subdependencies.contains(SubDependency {AlterTableType::SET_DEFAULT, column.Name()})) {
-				return column;
-			}
-		}
-	}
-	if (columns.LogicalColumnCount() == 0) {
-		return nullptr;
-	}
-	return columns.GetColumn(LogicalIndex(0));
-}
-
-static void PlanOwnedByTable(ExportPlan &plan, TableCatalogEntry &table, CatalogEntry &owned) {
-	if (table.NumbersRowsWith(owned)) {
-		plan.created_by_target.insert(owned);
-		plan.written_after[owned].push_back(table);
-		return;
-	}
-	if (table.ParentCatalog().Compatibility() != SqlCompatibility::POSTGRES || owned.internal) {
-		return;
-	}
-	auto column = OwningColumn(table, owned);
-	if (!column) {
-		return;
-	}
-	ChangeOwnershipInfo ownership(
-	    owned.type,
-	    AlterEntryData(QualifiedName(owned.ParentSchemaPath(), owned.name), OnEntryNotFound::THROW_EXCEPTION),
-	    Identifier(), Identifier());
-	ownership.owner_path = {table.name, column->Name()};
-	plan.at_end += ownership.ToString() + "\n";
-}
-
-static ExportPlan PlanExport(CatalogTransaction transaction, Catalog &catalog, const catalog_entry_vector_t &entries) {
-	ExportPlan plan;
-	auto dependency_manager = catalog.GetDependencyManager();
-	for (auto &owner : entries) {
-		if (owner.get().type == CatalogType::SCHEMA_ENTRY &&
-		    owner.get().name == owner.get().ParentCatalog().GetDefaultSchema()) {
-			plan.created_by_target.insert(owner.get());
-		}
-		if (!dependency_manager) {
-			continue;
-		}
-		for (auto &owned : dependency_manager->OwnedEntries(transaction, owner)) {
-			if (owned.get().type == CatalogType::JOB_ENTRY) {
-				PlanOwnedJob(transaction, plan, owner, owned);
-			} else if (owner.get().type == CatalogType::TABLE_ENTRY) {
-				PlanOwnedByTable(plan, owner.get().Cast<TableCatalogEntry>(), owned);
-			}
-		}
-	}
-	return plan;
-}
-
 static void AddEntries(catalog_entry_vector_t &all_entries, catalog_entry_vector_t &to_add) {
 	for (auto &entry : to_add) {
 		all_entries.push_back(entry);
@@ -568,16 +507,14 @@ SourceResultType PhysicalExport::GetDataInternal(ExecutionContext &context, Data
 
 	catalog_entry_vector_t catalog_entries;
 	catalog_entries = GetNaiveExportOrder(context.client, catalog);
-	auto transaction = catalog.GetCatalogTransaction(ccontext);
-	auto plan = PlanExport(transaction, catalog, catalog_entries);
 	auto dependency_manager = catalog.GetDependencyManager();
 	if (dependency_manager) {
-		dependency_manager->ReorderEntries(catalog_entries, ccontext, plan.written_after);
+		dependency_manager->ReorderEntries(catalog_entries, ccontext, CreatedByOwner);
 	}
 
 	// write the schema.sql file
 	stringstream ss;
-	WriteCatalogEntries(ss, transaction, catalog_entries, plan);
+	WriteCatalogEntries(ss, catalog.GetCatalogTransaction(ccontext), catalog_entries, dependency_manager);
 	WriteStringStreamToFile(fs, ss, fs.JoinPath(info->file_path, "schema.sql"));
 
 	// write the load.sql file

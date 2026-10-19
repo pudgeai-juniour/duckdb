@@ -1177,31 +1177,31 @@ void DependencyManager::OrderDrop(CatalogTransaction transaction, CatalogEntry &
 }
 
 void DependencyManager::ReorderEntries(catalog_entry_vector_t &entries, ClientContext &context,
-                                       const catalog_entry_map_t<catalog_entry_vector_t> &written_after) {
+                                       const created_by_owner_t &created_by_owner) {
 	auto transaction = catalog.GetCatalogTransaction(context);
 	// Read all the entries visible to this snapshot. Internal entries are not exported
-	ReorderEntries(entries, transaction, false, written_after);
+	ReorderEntries(entries, transaction, false, created_by_owner);
 }
 
 void DependencyManager::ReorderEntries(catalog_entry_vector_t &entries) {
 	// Read all committed entries. A checkpoint writes internal entries too
 	CatalogTransaction transaction(catalog.GetDatabase(), MAX_COMMIT_ID, VisibilityBound::Before(MAX_COMMIT_ID));
-	ReorderEntries(entries, transaction, true, catalog_entry_map_t<catalog_entry_vector_t>());
+	ReorderEntries(entries, transaction, true, nullptr);
 }
 
 void DependencyManager::ReorderEntry(CatalogTransaction transaction, CatalogEntry &entry, catalog_entry_set_t &visited,
                                      catalog_entry_vector_t &order, bool allow_internal,
-                                     const catalog_entry_map_t<catalog_entry_vector_t> &written_after) {
+                                     const created_by_owner_t &created_by_owner) {
 	auto &catalog_entry = *LookupEntry(transaction, entry);
 	if (visited.count(catalog_entry) || (!allow_internal && catalog_entry.internal)) {
 		// Already seen and ordered appropriately
 		return;
 	}
 	visited.insert(catalog_entry);
-	auto predecessors = written_after.find(catalog_entry);
-	if (predecessors != written_after.end()) {
-		for (auto &predecessor : predecessors->second) {
-			ReorderEntry(transaction, predecessor, visited, order, allow_internal, written_after);
+	if (created_by_owner) {
+		auto owner = OwnerOf(transaction, catalog_entry);
+		if (owner && created_by_owner(*owner, catalog_entry)) {
+			ReorderEntry(transaction, *owner, visited, order, allow_internal, created_by_owner);
 		}
 	}
 
@@ -1214,7 +1214,7 @@ void DependencyManager::ReorderEntry(CatalogTransaction transaction, CatalogEntr
 		}
 	});
 	for (auto &dep : dependents) {
-		ReorderEntry(transaction, dep, visited, order, allow_internal, written_after);
+		ReorderEntry(transaction, dep, visited, order, allow_internal, created_by_owner);
 	}
 
 	// Then write the entry
@@ -1222,12 +1222,11 @@ void DependencyManager::ReorderEntry(CatalogTransaction transaction, CatalogEntr
 }
 
 void DependencyManager::ReorderEntries(catalog_entry_vector_t &entries, CatalogTransaction transaction,
-                                       bool allow_internal,
-                                       const catalog_entry_map_t<catalog_entry_vector_t> &written_after) {
+                                       bool allow_internal, const created_by_owner_t &created_by_owner) {
 	catalog_entry_vector_t reordered;
 	catalog_entry_set_t visited;
 	for (auto &entry : entries) {
-		ReorderEntry(transaction, entry, visited, reordered, allow_internal, written_after);
+		ReorderEntry(transaction, entry, visited, reordered, allow_internal, created_by_owner);
 	}
 	// If this would fail, that means there are more entries that we somehow reached through the dependency manager
 	// but those entries should not actually be visible to this transaction
@@ -1495,6 +1494,20 @@ catalog_entry_vector_t DependencyManager::OwnedEntries(CatalogTransaction transa
 		}
 	});
 	return result;
+}
+
+optional_ptr<CatalogEntry> DependencyManager::OwnerOf(CatalogTransaction transaction, const CatalogEntry &entry) {
+	optional_ptr<CatalogEntry> owner;
+	if (IsSystemEntry(entry)) {
+		return owner;
+	}
+	lock_guard<mutex> write_lock(catalog.GetWriteLock());
+	ScanDependents(transaction, GetLookupProperties(transaction, entry), [&](DependencyEntry &dep) {
+		if (dep.Dependent().flags.IsOwnedBy()) {
+			owner = LookupEntry(transaction, dep);
+		}
+	});
+	return owner;
 }
 
 void DependencyManager::AddOwnership(CatalogTransaction transaction, CatalogEntry &owner, CatalogEntry &entry) {

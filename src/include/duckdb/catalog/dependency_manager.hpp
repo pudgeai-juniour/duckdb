@@ -100,11 +100,13 @@ public:
 	void AddOwnership(CatalogTransaction transaction, CatalogEntry &owner, CatalogEntry &entry);
 	void RemoveOwnership(CatalogTransaction transaction, CatalogEntry &entry);
 	catalog_entry_vector_t OwnedEntries(CatalogTransaction transaction, const CatalogEntry &owner);
+	optional_ptr<CatalogEntry> OwnerOf(CatalogTransaction transaction, const CatalogEntry &entry);
 
+	using created_by_owner_t = std::function<bool(CatalogEntry &owner, CatalogEntry &owned)>;
 	//! Get the order of entries needed by EXPORT, the objects with no dependencies are exported first
 	void ReorderEntries(catalog_entry_vector_t &entries);
 	void ReorderEntries(catalog_entry_vector_t &entries, ClientContext &context,
-	                    const catalog_entry_map_t<catalog_entry_vector_t> &written_after);
+	                    const created_by_owner_t &created_by_owner);
 
 	static bool CanDepend(Catalog &dependent, Catalog &subject);
 	void ScanDependentEntries(CatalogTransaction transaction, CatalogEntry &object,
@@ -152,10 +154,9 @@ public:
 
 private:
 	void ReorderEntry(CatalogTransaction transaction, CatalogEntry &entry, catalog_entry_set_t &visited,
-	                  catalog_entry_vector_t &order, bool allow_internal,
-	                  const catalog_entry_map_t<catalog_entry_vector_t> &written_after);
+	                  catalog_entry_vector_t &order, bool allow_internal, const created_by_owner_t &created_by_owner);
 	void ReorderEntries(catalog_entry_vector_t &entries, CatalogTransaction transaction, bool allow_internal,
-	                    const catalog_entry_map_t<catalog_entry_vector_t> &written_after);
+	                    const created_by_owner_t &created_by_owner);
 	void AddObject(CatalogTransaction transaction, CatalogEntry &object, const LogicalDependencyList &dependencies);
 	void VerifyExistence(CatalogTransaction transaction, DependencyEntry &object);
 	void VerifyCommitDrop(CatalogTransaction transaction, VisibilityBound visibility_bound, CatalogEntry &object);
