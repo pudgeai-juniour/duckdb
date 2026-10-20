@@ -950,13 +950,6 @@
         "type": "RegexMatchOperatorSemantics",
         "property": "body_parser_options.regex_match_operator_semantics",
         "default": "RegexMatchOperatorSemantics::PARTIAL"
-      },
-      {
-        "id": 207,
-        "name": "body_max_expression_depth",
-        "type": "idx_t",
-        "property": "body_parser_options.max_expression_depth",
-        "default": "ParserOptions::DEFAULT_MAX_EXPRESSION_DEPTH"
       }
     ],
     "methods": {

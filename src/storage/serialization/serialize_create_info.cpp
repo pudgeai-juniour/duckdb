@@ -227,7 +227,6 @@ void CreateJobInfo::Serialize(Serializer &serializer) const {
 	serializer.WritePropertyWithDefault<IdentifierCaseMode>(204, "body_identifier_case_mode", body_parser_options.identifier_case_mode, IdentifierCaseMode::PRESERVE_CASE);
 	serializer.WritePropertyWithDefault<bool>(205, "body_integer_division", body_parser_options.integer_division, false);
 	serializer.WritePropertyWithDefault<RegexMatchOperatorSemantics>(206, "body_regex_match_operator_semantics", body_parser_options.regex_match_operator_semantics, RegexMatchOperatorSemantics::PARTIAL);
-	serializer.WritePropertyWithDefault<idx_t>(207, "body_max_expression_depth", body_parser_options.max_expression_depth, ParserOptions::DEFAULT_MAX_EXPRESSION_DEPTH);
 }
 
 unique_ptr<CreateInfo> CreateJobInfo::Deserialize(Deserializer &deserializer) {
@@ -239,7 +238,6 @@ unique_ptr<CreateInfo> CreateJobInfo::Deserialize(Deserializer &deserializer) {
 	deserializer.ReadPropertyWithExplicitDefault<IdentifierCaseMode>(204, "body_identifier_case_mode", result->body_parser_options.identifier_case_mode, IdentifierCaseMode::PRESERVE_CASE);
 	deserializer.ReadPropertyWithExplicitDefault<bool>(205, "body_integer_division", result->body_parser_options.integer_division, false);
 	deserializer.ReadPropertyWithExplicitDefault<RegexMatchOperatorSemantics>(206, "body_regex_match_operator_semantics", result->body_parser_options.regex_match_operator_semantics, RegexMatchOperatorSemantics::PARTIAL);
-	deserializer.ReadPropertyWithExplicitDefault<idx_t>(207, "body_max_expression_depth", result->body_parser_options.max_expression_depth, ParserOptions::DEFAULT_MAX_EXPRESSION_DEPTH);
 	result->SetName(std::move(name));
 	result->SetBody(std::move(body));
 	return std::move(result);
