@@ -25,6 +25,10 @@ ExpressionBinder::ExpressionBinder(Binder &binder, ClientContext &context) : bin
 ExpressionBinder::~ExpressionBinder() {
 }
 
+idx_t ExpressionBinder::SharedMacroArguments() const {
+	return binder.global_binder_state->shared_macro_arguments;
+}
+
 void ExpressionBinder::InitializeStackCheck() {
 	static constexpr idx_t INITIAL_DEPTH = 5;
 	if (binder.HasEnclosingScope()) {

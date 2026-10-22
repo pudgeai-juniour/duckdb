@@ -312,6 +312,7 @@ protected:
 	virtual bool CanShareMacroArguments() const {
 		return true;
 	}
+	idx_t SharedMacroArguments() const;
 	virtual BindResult BindAggregate(FunctionExpression &expr, AggregateFunctionCatalogEntry &function, idx_t depth);
 	virtual BindResult BindWindow(FunctionExpression &expr, WindowFunctionCatalogEntry &function, idx_t depth);
 	virtual BindResult BindUnnest(FunctionExpression &expr, idx_t depth, bool root_expression);
