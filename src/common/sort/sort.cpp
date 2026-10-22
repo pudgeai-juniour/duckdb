@@ -198,7 +198,7 @@ public:
 	MonotonicProgress sink_progress;
 
 	//! Whether this is an external sort
-	bool external;
+	atomic<bool> external;
 	//! Whether any thread has called Combine yet
 	bool any_combined;
 
