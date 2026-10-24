@@ -76,9 +76,13 @@ unique_ptr<LogicalOperator> FilterPushdown::PushdownAggregate(unique_ptr<Logical
 		}
 		// no aggregate! we can push this down
 		// rewrite any group bindings within the filter
+		bool composes_group = projection_mode != ProjectionMode::ALLOW_COMPUTED_EXPRESSIONS &&
+		                      ReferencesComputedExpression(aggr, *f.filter);
 		f.filter = ReplaceGroupBindings(aggr, std::move(f.filter));
 		// add the filter to the child node
-		if (child_pushdown.AddFilter(std::move(f.filter)) == FilterResult::UNSATISFIABLE) {
+		auto result = composes_group ? child_pushdown.RewriteAndAddFilter(std::move(f.filter))
+		                             : child_pushdown.AddFilter(std::move(f.filter));
+		if (result == FilterResult::UNSATISFIABLE) {
 			// filter statically evaluates to false, strip tree
 			return make_uniq<LogicalEmptyResult>(std::move(op));
 		}

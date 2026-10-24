@@ -344,7 +344,7 @@ void Optimizer::RunBuiltInOptimizers() {
 
 	// perform filter pushdown
 	RunOptimizer(OptimizerType::FILTER_PUSHDOWN, [&]() {
-		FilterPushdown filter_pushdown(*this);
+		FilterPushdown filter_pushdown(*this, true, FilterPushdown::ProjectionMode::REWRITE_COMPUTED_EXPRESSIONS);
 		unordered_set<TableIndex> top_bindings;
 		filter_pushdown.CheckMarkToSemi(*plan, top_bindings);
 		plan = filter_pushdown.Rewrite(std::move(plan));

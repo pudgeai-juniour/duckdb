@@ -103,7 +103,7 @@ FROM (
 ) sq
 WHERE x < 10;
 ----
-logical_opt	<REGEX>:(?s).*Expressions: payload.*Expressions: \(i \+ 1\) < 10.*RANGE.*
+logical_opt	<REGEX>:(?s).*Expressions: payload.*Expressions: i < 9.*RANGE.*
 
 # Preserve NULLs and duplicates while splitting a computed projection
 statement ok

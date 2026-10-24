@@ -148,10 +148,14 @@ unique_ptr<LogicalOperator> FilterPushdown::PushdownProjection(unique_ptr<Logica
 			// Compute filter-dependent projection expressions once, below the filter.
 			split_expressions.push_back(std::move(f.filter));
 		} else {
+			bool composes_expression = projection_mode != ProjectionMode::ALLOW_COMPUTED_EXPRESSIONS &&
+			                           ReferencesComputedExpression(proj, *f.filter);
 			// rewrite the bindings within this subquery
 			f.filter = ReplaceProjectionBindings(proj, std::move(f.filter));
 			// add the filter to the child pushdown
-			if (child_pushdown.AddFilter(std::move(f.filter)) == FilterResult::UNSATISFIABLE) {
+			auto result = composes_expression ? child_pushdown.RewriteAndAddFilter(std::move(f.filter))
+			                                  : child_pushdown.AddFilter(std::move(f.filter));
+			if (result == FilterResult::UNSATISFIABLE) {
 				// filter statically evaluates to false, strip tree
 				return make_uniq<LogicalEmptyResult>(std::move(op));
 			}

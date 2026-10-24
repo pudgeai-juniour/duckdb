@@ -21,7 +21,11 @@ class Optimizer;
 
 class FilterPushdown {
 public:
-	enum class ProjectionMode : uint8_t { ALLOW_COMPUTED_EXPRESSIONS, PRESERVE_COMPUTED_EXPRESSIONS };
+	enum class ProjectionMode : uint8_t {
+		ALLOW_COMPUTED_EXPRESSIONS,
+		REWRITE_COMPUTED_EXPRESSIONS,
+		PRESERVE_COMPUTED_EXPRESSIONS
+	};
 
 	explicit FilterPushdown(Optimizer &optimizer, bool convert_mark_joins = true,
 	                        ProjectionMode projection_mode = ProjectionMode::ALLOW_COMPUTED_EXPRESSIONS);
@@ -129,6 +133,7 @@ private:
 
 	unique_ptr<LogicalOperator> PushFiltersIntoDelimJoin(unique_ptr<LogicalOperator> op);
 	FilterResult AddFilter(unique_ptr<Expression> expr);
+	FilterResult RewriteAndAddFilter(unique_ptr<Expression> expr);
 	//! Extract filter bindings to compare them with expressions in an operator and determine if the filter
 	//! can be pushed down
 	void ExtractFilterBindings(const Expression &expr, vector<ColumnBinding> &bindings);

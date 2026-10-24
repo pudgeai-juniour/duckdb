@@ -254,6 +254,17 @@ FilterResult FilterPushdown::AddFilter(unique_ptr<Expression> expr) {
 	return combiner.AddConjuncts(std::move(expr));
 }
 
+FilterResult FilterPushdown::RewriteAndAddFilter(unique_ptr<Expression> expr) {
+	LogicalFilter filter(std::move(expr));
+	optimizer.rewriter.VisitOperator(filter);
+	for (auto &rewritten : filter.expressions) {
+		if (AddFilter(std::move(rewritten)) == FilterResult::UNSATISFIABLE) {
+			return FilterResult::UNSATISFIABLE;
+		}
+	}
+	return FilterResult::SUCCESS;
+}
+
 void FilterPushdown::GenerateFilters() {
 	if (!filters.empty()) {
 		D_ASSERT(!combiner.HasFilters());
