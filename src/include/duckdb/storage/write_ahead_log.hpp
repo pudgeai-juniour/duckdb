@@ -39,6 +39,8 @@ class Transaction;
 class TransactionManager;
 class WriteAheadLogDeserializer;
 struct PersistentCollectionData;
+struct WALDeleteRowPositions;
+struct WALRowPositionMaps;
 
 enum class WALInitState { NO_WAL, UNINITIALIZED, UNINITIALIZED_REQUIRES_TRUNCATE, INITIALIZED };
 
@@ -49,8 +51,8 @@ public:
 	void WriteInsert(DataChunk &chunk);
 	void WriteTruncateTable();
 	void WriteAdoptSegments(vector<string> segments);
-	void WriteDeleteRowPositions(string positions);
-	void WriteRowPositionMaps(string maps);
+	void WriteDeleteRowPositions(const WALDeleteRowPositions &positions);
+	void WriteRowPositionMaps(const WALRowPositionMaps &maps);
 
 private:
 	friend class WriteAheadLog;

@@ -833,7 +833,48 @@
     "members": [
       {
         "id": 101,
-        "name": "positions",
+        "name": "segments",
+        "type": "vector<uint32_t>"
+      },
+      {
+        "id": 102,
+        "name": "docs",
+        "type": "vector<string>"
+      }
+    ]
+  },
+  {
+    "class": "WALRowPositionMap",
+    "pointer_type": "none",
+    "members": [
+      {
+        "id": 100,
+        "name": "source",
+        "type": "uint32_t"
+      },
+      {
+        "id": 101,
+        "name": "target",
+        "type": "uint32_t"
+      },
+      {
+        "id": 102,
+        "name": "rank_begin",
+        "type": "uint32_t"
+      },
+      {
+        "id": 103,
+        "name": "rank_end",
+        "type": "uint32_t"
+      },
+      {
+        "id": 104,
+        "name": "base",
+        "type": "uint32_t"
+      },
+      {
+        "id": 105,
+        "name": "mask",
         "type": "string"
       }
     ]
@@ -845,7 +886,7 @@
       {
         "id": 101,
         "name": "maps",
-        "type": "string"
+        "type": "vector<WALRowPositionMap>"
       }
     ]
   }

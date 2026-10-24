@@ -2188,14 +2188,14 @@ void WriteAheadLogDeserializer::ReplayAdoptSegments() {
 
 void WriteAheadLogDeserializer::ReplayDeleteRowPositions() {
 	auto entry = WALDeleteRowPositions::Deserialize(deserializer);
-	if (entry.positions.empty()) {
+	if (entry.segments.empty()) {
 		throw DataCorruptionException("Corrupt WAL: empty row position delete");
 	}
 	if (DeserializeOnly()) {
 		return;
 	}
 	if (!state.current_table && state.current_log_table) {
-		state.current_log_table->ReplayDeleteRowPositions(context, std::move(entry.positions));
+		state.current_log_table->ReplayDeleteRowPositions(context, entry);
 		return;
 	}
 	if (!state.current_table && state.table_storage) {
@@ -2213,7 +2213,7 @@ void WriteAheadLogDeserializer::ReplayRowPositionMaps() {
 		return;
 	}
 	if (!state.current_table && state.current_log_table) {
-		state.current_log_table->ReplayRowPositionMaps(context, std::move(entry.maps));
+		state.current_log_table->ReplayRowPositionMaps(context, entry);
 		return;
 	}
 	if (!state.current_table && state.table_storage) {

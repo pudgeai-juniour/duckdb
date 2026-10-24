@@ -735,18 +735,18 @@ void WALEntryBuffer::WriteAdoptSegments(vector<string> segments) {
 	entry_count++;
 }
 
-void WALEntryBuffer::WriteDeleteRowPositions(string positions) {
-	D_ASSERT(!positions.empty());
+void WALEntryBuffer::WriteDeleteRowPositions(const WALDeleteRowPositions &positions) {
+	D_ASSERT(!positions.segments.empty() && positions.segments.size() == positions.docs.size());
 	WriteAheadLogSerializer serializer(database, stream, WALType::DELETE_ROW_POSITIONS);
-	serializer.WriteEntry(WALDeleteRowPositions {std::move(positions)});
+	serializer.WriteEntry(positions);
 	serializer.End();
 	entry_count++;
 }
 
-void WALEntryBuffer::WriteRowPositionMaps(string maps) {
-	D_ASSERT(!maps.empty());
+void WALEntryBuffer::WriteRowPositionMaps(const WALRowPositionMaps &maps) {
+	D_ASSERT(!maps.maps.empty());
 	WriteAheadLogSerializer serializer(database, stream, WALType::ROW_POSITION_MAPS);
-	serializer.WriteEntry(WALRowPositionMaps {std::move(maps)});
+	serializer.WriteEntry(maps);
 	serializer.End();
 	entry_count++;
 }
