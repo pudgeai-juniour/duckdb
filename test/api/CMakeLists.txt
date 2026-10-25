@@ -24,6 +24,7 @@ set(TEST_API_OBJECTS
     test_alias_type_overload.cpp
     test_aggregate_state_bind_data.cpp
     test_cast_lookup.cpp
+    test_type_scoped_overload.cpp
     test_record_result_function.cpp
     test_config.cpp
     test_connection_secrets.cpp

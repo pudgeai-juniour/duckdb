@@ -415,6 +415,12 @@ public:
 
 	hash_t Hash() const;
 
+	bool IsTypeScoped() const {
+		return type_scoped;
+	}
+	void SetTypeScoped() {
+		type_scoped = true;
+	}
 	bool IsRecordResult() const {
 		return record_result;
 	}
@@ -426,6 +432,7 @@ private:
 	vector<FunctionParameter> parameters;
 	shared_ptr<TypedKwargs> typed_kwargs; // optional "schema" for the accepted **kwargs
 	LogicalType return_type;
+	bool type_scoped = false;
 	bool record_result = false;
 };
 

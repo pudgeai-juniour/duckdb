@@ -205,6 +205,54 @@ optional_idx FunctionOverloads::Cost(optional_ptr<ClientContext> context, const 
 	return cost;
 }
 
+static bool IsParameterType(const FunctionSignature &signature, const LogicalType &argument) {
+	if (argument.GetTypeInfo().alias.empty()) {
+		return false;
+	}
+	for (auto &parameter : signature.GetParameters()) {
+		if (parameter.GetType() == argument) {
+			return true;
+		}
+	}
+	return false;
+}
+
+static bool HasAliasedArgument(const vector<LogicalType> &arguments,
+                               const vector<pair<Identifier, LogicalType>> &named_arguments) {
+	for (auto &argument : arguments) {
+		if (!argument.GetTypeInfo().alias.empty()) {
+			return true;
+		}
+	}
+	for (auto &named_argument : named_arguments) {
+		if (!named_argument.second.GetTypeInfo().alias.empty()) {
+			return true;
+		}
+	}
+	return false;
+}
+
+static bool IsPriced(const FunctionSignature &signature, bool aliased_argument, const vector<LogicalType> &arguments,
+                     const vector<pair<Identifier, LogicalType>> &named_arguments) {
+	if (!signature.IsTypeScoped()) {
+		return true;
+	}
+	if (!aliased_argument) {
+		return false;
+	}
+	for (auto &argument : arguments) {
+		if (IsParameterType(signature, argument)) {
+			return true;
+		}
+	}
+	for (auto &named_argument : named_arguments) {
+		if (IsParameterType(signature, named_argument.second)) {
+			return true;
+		}
+	}
+	return false;
+}
+
 template <class T>
 vector<idx_t> FunctionOverloads::Candidates(optional_ptr<ClientContext> context, const Identifier &name,
                                             const FunctionSet<T> &functions, const vector<LogicalType> &arguments,
@@ -213,8 +261,15 @@ vector<idx_t> FunctionOverloads::Candidates(optional_ptr<ClientContext> context,
 	optional_idx best_function;
 	idx_t lowest_cost = NumericLimits<idx_t>::Maximum();
 	vector<idx_t> candidate_functions;
+	const bool aliased_argument = HasAliasedArgument(arguments, named_arguments);
 	for (idx_t f_idx = 0; f_idx < functions.functions.size(); f_idx++) {
 		auto &func = *functions.functions[f_idx];
+		if (!IsPriced(func.GetSignature(), aliased_argument, arguments, named_arguments)) {
+			if (!aliased_argument) {
+				break;
+			}
+			continue;
+		}
 		// check the arguments of the function
 		auto bind_cost = Cost(context, func, arguments, named_arguments);
 		if (!bind_cost.IsValid()) {
@@ -245,7 +300,9 @@ vector<idx_t> FunctionOverloads::Candidates(optional_ptr<ClientContext> context,
 			if (schema_name.empty() && !f->GetSchemaName().empty()) {
 				schema_name = f->GetSchemaName();
 			}
-			candidates.push_back(f->ToString());
+			if (IsPriced(f->GetSignature(), aliased_argument, arguments, named_arguments)) {
+				candidates.push_back(f->ToString());
+			}
 		}
 		error = ErrorData(BinderException::NoMatchingFunction(catalog_name, schema_name, name, arguments,
 		                                                      named_arguments, candidates));
