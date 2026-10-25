@@ -484,10 +484,7 @@ struct WALDeleteRowPositions {
 struct WALRowPositionMap {
 	uint32_t source = 0;
 	uint32_t target = 0;
-	uint32_t rank_begin = 0;
-	uint32_t rank_end = 0;
-	uint32_t base = 0;
-	string mask;
+	string docs;
 
 	void Serialize(Serializer &serializer) const;
 	static WALRowPositionMap Deserialize(Deserializer &deserializer);

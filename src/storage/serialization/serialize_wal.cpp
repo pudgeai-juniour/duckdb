@@ -592,20 +592,14 @@ WALReplicationLsn WALReplicationLsn::Deserialize(Deserializer &deserializer) {
 void WALRowPositionMap::Serialize(Serializer &serializer) const {
 	serializer.WritePropertyWithDefault<uint32_t>(100, "source", source);
 	serializer.WritePropertyWithDefault<uint32_t>(101, "target", target);
-	serializer.WritePropertyWithDefault<uint32_t>(102, "rank_begin", rank_begin);
-	serializer.WritePropertyWithDefault<uint32_t>(103, "rank_end", rank_end);
-	serializer.WritePropertyWithDefault<uint32_t>(104, "base", base);
-	serializer.WritePropertyWithDefault<string>(105, "mask", mask);
+	serializer.WritePropertyWithDefault<string>(102, "docs", docs);
 }
 
 WALRowPositionMap WALRowPositionMap::Deserialize(Deserializer &deserializer) {
 	WALRowPositionMap result;
 	deserializer.ReadPropertyWithDefault<uint32_t>(100, "source", result.source);
 	deserializer.ReadPropertyWithDefault<uint32_t>(101, "target", result.target);
-	deserializer.ReadPropertyWithDefault<uint32_t>(102, "rank_begin", result.rank_begin);
-	deserializer.ReadPropertyWithDefault<uint32_t>(103, "rank_end", result.rank_end);
-	deserializer.ReadPropertyWithDefault<uint32_t>(104, "base", result.base);
-	deserializer.ReadPropertyWithDefault<string>(105, "mask", result.mask);
+	deserializer.ReadPropertyWithDefault<string>(102, "docs", result.docs);
 	return result;
 }
 

@@ -859,22 +859,7 @@
       },
       {
         "id": 102,
-        "name": "rank_begin",
-        "type": "uint32_t"
-      },
-      {
-        "id": 103,
-        "name": "rank_end",
-        "type": "uint32_t"
-      },
-      {
-        "id": 104,
-        "name": "base",
-        "type": "uint32_t"
-      },
-      {
-        "id": 105,
-        "name": "mask",
+        "name": "docs",
         "type": "string"
       }
     ]
