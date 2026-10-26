@@ -5,7 +5,9 @@
 #include "duckdb/parser/expression/columnref_expression.hpp"
 #include "duckdb/parser/expression/comparison_expression.hpp"
 #include "duckdb/parser/expression/function_expression.hpp"
+#include "duckdb/parser/expression/star_expression.hpp"
 #include "duckdb/parser/expression/subquery_expression.hpp"
+#include "duckdb/parser/expression/window_expression.hpp"
 #include "duckdb/parser/query_node/select_node.hpp"
 #include "duckdb/parser/tableref/emptytableref.hpp"
 #include "duckdb/parser/statement/select_statement.hpp"
@@ -431,6 +433,18 @@ static vector<LogicalType> ReturnTypesOf(const BoundStatement &query, const vect
 	return targets;
 }
 
+static unique_ptr<QueryNode> WithOrdinality(unique_ptr<QueryNode> node) {
+	auto subquery = make_uniq<SelectStatement>();
+	subquery->node = std::move(node);
+	auto result = make_uniq<SelectNode>();
+	result->select_list.push_back(make_uniq<StarExpression>());
+	auto row_number = make_uniq<WindowExpression>("", "", RowNumberFun::Name);
+	row_number->SetAlias(Identifier("ordinality"));
+	result->select_list.push_back(std::move(row_number));
+	result->from_table = make_uniq<SubqueryRef>(std::move(subquery));
+	return std::move(result);
+}
+
 BoundStatement Binder::Bind(TableFunctionRef &ref) {
 	QueryErrorContext error_context(ref.query_location);
 
@@ -491,6 +505,9 @@ BoundStatement Binder::Bind(TableFunctionRef &ref) {
 		optional_ptr<MacroFunction> definition;
 		auto query_node = BindTableMacro(fexpr, macro_func, 0, definition);
 		D_ASSERT(query_node);
+		if (ref.with_ordinality == OrdinalityType::WITH_ORDINALITY) {
+			query_node = WithOrdinality(std::move(query_node));
+		}
 
 		auto binder_child = Binder::CreateBinder(context, this);
 		binder_child->SetCanContainNulls(true);
