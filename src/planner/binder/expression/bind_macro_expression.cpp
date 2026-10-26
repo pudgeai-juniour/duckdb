@@ -803,11 +803,25 @@ ScalarMacroFunction &ExpressionBinder::UnfoldMacroExpression(FunctionExpression 
 	// replace current expression with stored macro expression
 	// special case: If this is a window function, then we need to return a window expression
 	const bool is_window = expr->GetExpressionClass() == ExpressionClass::WINDOW;
+	const bool distinct = !is_window && function.Distinct();
+	unique_ptr<ParsedExpression> filter;
+	unique_ptr<OrderModifier> order_by;
+	Identifier function_name;
 	if (is_window) {
 		UnfoldWindowMacroExpression(expr, macro_def);
 	} else {
+		filter = std::move(function.FilterMutable());
+		order_by = std::move(function.OrderByMutable());
+		function_name = function.FunctionName();
 		expr = macro_def.expression->Copy();
 	}
+	const bool ordered = order_by && !order_by->orders.empty();
+	const bool call_modifiers = distinct || filter || ordered;
+	auto modifiers_error = [&]() {
+		return InvalidInputException("Function %s is a %s. \"DISTINCT\", \"FILTER\", and \"ORDER BY\" are only "
+		                             "applicable to window and aggregate functions.",
+		                             function_name, CatalogTypeToString(CatalogType::MACRO_ENTRY));
+	};
 
 	// qualify only the macro parameters with a new empty binder that only knows the macro binding
 	auto dummy_binder = Binder::CreateBinder(context);
@@ -889,6 +903,9 @@ ScalarMacroFunction &ExpressionBinder::UnfoldMacroExpression(FunctionExpression 
 	}
 
 	if (macro_def.query_body && !is_window) {
+		if (call_modifiers) {
+			throw modifiers_error();
+		}
 		D_ASSERT(shared_names.empty());
 		ExpandSqlFunctionBody(*new_macro_binding, positional_arguments, expr);
 		return macro_def;
@@ -898,6 +915,32 @@ ScalarMacroFunction &ExpressionBinder::UnfoldMacroExpression(FunctionExpression 
 	macro_binding = new_macro_binding.get();
 	vector<identifier_set_t> lambda_params;
 	ReplaceMacroParameters(expr, lambda_params);
+	if (call_modifiers) {
+		vector<reference<unique_ptr<ParsedExpression>>> aggregates;
+		FindAggregateExprs(expr, aggregates);
+		if (aggregates.empty() || (distinct && aggregates.size() != 1)) {
+			throw modifiers_error();
+		}
+		for (auto &aggregate : aggregates) {
+			auto &target = aggregate.get()->Cast<FunctionExpression>();
+			target.DistinctMutable() = target.Distinct() || distinct;
+			if (filter) {
+				auto combined = filter->Copy();
+				if (target.Filter()) {
+					combined = make_uniq<ConjunctionExpression>(ExpressionType::CONJUNCTION_AND,
+					                                            std::move(target.FilterMutable()), std::move(combined));
+				}
+				target.FilterMutable() = std::move(combined);
+			}
+			if (ordered) {
+				auto prefix = order_by->Copy();
+				auto &call_orders = prefix->Cast<OrderModifier>().orders;
+				auto &orders = target.OrderByMutable()->orders;
+				orders.insert(orders.begin(), std::make_move_iterator(call_orders.begin()),
+				              std::make_move_iterator(call_orders.end()));
+			}
+		}
+	}
 	if (shared_names.empty()) {
 		return macro_def;
 	}
