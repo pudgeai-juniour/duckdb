@@ -18,10 +18,13 @@
 #include "duckdb/parser/expression/columnref_expression.hpp"
 #include "duckdb/parser/expression/subquery_expression.hpp"
 #include "duckdb/parser/parsed_expression_iterator.hpp"
+#include "duckdb/planner/table_binding.hpp"
 
 #include <charconv>
 
 namespace duckdb {
+
+static void ReplacePositionalParamsInQuery(QueryNode &node, const vector<Identifier> &param_names);
 
 static void ReplacePositionalParams(unique_ptr<ParsedExpression> &expr, const vector<Identifier> &param_names) {
 	if (!expr) {
@@ -33,11 +36,15 @@ static void ReplacePositionalParams(unique_ptr<ParsedExpression> &expr, const ve
 		idx_t idx = 0;
 		auto [ptr, ec] = std::from_chars(param_id.data(), param_id.data() + param_id.size(), idx);
 		if (ec == std::errc() && ptr == param_id.data() + param_id.size() && idx >= 1 && idx <= param_names.size()) {
-			auto replacement = make_uniq<ColumnRefExpression>(param_names[idx - 1]);
+			auto replacement =
+			    make_uniq<ColumnRefExpression>(param_names[idx - 1], Identifier(DummyBinding::DUMMY_NAME));
 			replacement->SetAlias(expr->GetAlias());
 			expr = std::move(replacement);
 			return;
 		}
+	}
+	if (expr->GetExpressionClass() == ExpressionClass::SUBQUERY) {
+		ReplacePositionalParamsInQuery(*expr->Cast<SubqueryExpression>().SubqueryMutable()->node, param_names);
 	}
 	ParsedExpressionIterator::EnumerateChildren(
 	    *expr, [&](unique_ptr<ParsedExpression> &child) { ReplacePositionalParams(child, param_names); });
@@ -45,11 +52,7 @@ static void ReplacePositionalParams(unique_ptr<ParsedExpression> &expr, const ve
 
 static void ReplacePositionalParamsInQuery(QueryNode &node, const vector<Identifier> &param_names) {
 	ParsedExpressionIterator::EnumerateQueryNodeChildren(
-	    node, [&](unique_ptr<ParsedExpression> &child) { ReplacePositionalParams(child, param_names); },
-	    [&](TableRef &ref) {
-		    ParsedExpressionIterator::EnumerateTableRefChildren(
-		        ref, [&](unique_ptr<ParsedExpression> &child) { ReplacePositionalParams(child, param_names); });
-	    });
+	    node, [&](unique_ptr<ParsedExpression> &child) { ReplacePositionalParams(child, param_names); });
 }
 
 static void ApplyPositionalParamRewrite(MacroFunction &macro) {
@@ -195,8 +198,8 @@ unique_ptr<MacroFunction> PEGTransformerFactory::TransformMacroDefinition(PEGTra
 	// children: 0 = Parens(MacroParameters?), 1 = FunctionDecorator* (Repeat), 2 = body choice group, 3 =
 	// FunctionDecorator* (Repeat).
 	auto &body_pr = list_pr.Child<ListParseResult>(2);
-	auto macro_function =
-	    transformer.Transform<unique_ptr<MacroFunction>>(body_pr.Child<ChoiceParseResult>(0).GetResult());
+	auto &body_choice = body_pr.Child<ChoiceParseResult>(0);
+	auto macro_function = transformer.Transform<unique_ptr<MacroFunction>>(body_choice.GetResult());
 	auto &parameters_pr = ExtractResultFromParens(list_pr.Child<ListParseResult>(0)).Cast<OptionalParseResult>();
 	// Collect parameters up front but defer applying them; bare `TYPE` params need to know whether LANGUAGE was
 	// specified to pick PG vs DuckDB semantics.
@@ -216,13 +219,14 @@ unique_ptr<MacroFunction> PEGTransformerFactory::TransformMacroDefinition(PEGTra
 	};
 	apply_decorators_at(1);
 	apply_decorators_at(3);
+	const bool sql_body = decorator_info.has_language || body_choice.Name() != "AsMacroBody";
 
 	if (!parameters.empty()) {
 		bool default_value_found = false;
 		identifier_set_t parameter_names;
 		for (auto &parameter : parameters) {
 			if (parameter.ambiguous_bare_type) {
-				if (decorator_info.has_language) {
+				if (sql_body) {
 					auto pos_name = Identifier("$" + std::to_string(macro_function->parameters.size() + 1));
 					auto builtin = DefaultTypeGenerator::GetDefaultType(parameter.name);
 					parameter.type = builtin.id() != LogicalTypeId::INVALID ? builtin : LogicalType::UNKNOWN;
@@ -303,6 +307,9 @@ unique_ptr<MacroFunction> PEGTransformerFactory::TransformMacroDefinition(PEGTra
 	// AFTER any LANGUAGE-SQL rewrite above (which may flip scalar -> table macro) and BEFORE the scalar-shoehorn wrap
 	// below.
 	ApplyPositionalParamRewrite(*macro_function);
+	if (sql_body) {
+		transformer.ClearParameters();
+	}
 
 	const bool is_scalar_returns =
 	    !macro_function->return_types.empty() && macro_function->return_names.empty() && !decorator_info.returns_set;
