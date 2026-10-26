@@ -161,6 +161,9 @@ public:
 	bool HasFunction() const {
 		return function;
 	}
+	bool UsesFunction(cast_function_t other) const {
+		return function == other;
+	}
 	bool IsNopCast() const;
 	//! Whether this is the fallback cast used when no cast exists between the types
 	//! It throws for any non-NULL value, regardless of the types involved
@@ -207,6 +210,9 @@ public:
 struct DefaultCasts {
 	DUCKDB_API static BoundCastInfo GetDefaultCastFunction(BindCastInput &input, const LogicalType &source,
 	                                                       const LogicalType &target);
+
+	DUCKDB_API static BoundCastInfo StringToListCast(BindCastInput &input, const LogicalType &target,
+	                                                 char array_delimiter);
 
 	DUCKDB_API static bool NopCast(Vector &source, Vector &result, idx_t count, CastParameters &parameters);
 	DUCKDB_API static bool TryVectorNullCast(Vector &source, Vector &result, idx_t count, CastParameters &parameters);
