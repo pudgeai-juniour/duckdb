@@ -2188,9 +2188,6 @@ void WriteAheadLogDeserializer::ReplayAdoptSegments() {
 
 void WriteAheadLogDeserializer::ReplayDeleteRowPositions() {
 	auto entry = WALDeleteRowPositions::Deserialize(deserializer);
-	if (entry.segments.empty()) {
-		throw DataCorruptionException("Corrupt WAL: empty row position delete");
-	}
 	if (DeserializeOnly()) {
 		return;
 	}
@@ -2206,9 +2203,6 @@ void WriteAheadLogDeserializer::ReplayDeleteRowPositions() {
 
 void WriteAheadLogDeserializer::ReplayRowPositionMaps() {
 	auto entry = WALRowPositionMaps::Deserialize(deserializer);
-	if (entry.maps.empty()) {
-		throw DataCorruptionException("Corrupt WAL: empty row position maps");
-	}
 	if (DeserializeOnly()) {
 		return;
 	}
