@@ -408,6 +408,7 @@ protected:
 
 private:
 	void ReplayIndexData(IndexStorageInfo &info, bool keep);
+	std::span<const data_t> ReadBitmap(field_id_t size_field, field_id_t docs_field);
 
 private:
 	ReplayState &state;
@@ -2186,13 +2187,36 @@ void WriteAheadLogDeserializer::ReplayAdoptSegments() {
 	throw DataCorruptionException("Corrupt WAL: segments without a log table");
 }
 
+std::span<const data_t> WriteAheadLogDeserializer::ReadBitmap(const field_id_t size_field,
+                                                              const field_id_t docs_field) {
+	if (!data) {
+		throw DataCorruptionException("Corrupt WAL: a log table's entry in an unframed WAL");
+	}
+	const auto size = deserializer.ReadProperty<idx_t>(size_field, "size");
+	deserializer.OnPropertyBegin(docs_field, "docs");
+	const auto position = stream.GetPosition();
+	if (size > stream.GetCapacity() - position) {
+		throw SerializationException("Failed to deserialize: not enough data in buffer to fulfill read request");
+	}
+	stream.SetPosition(position + size);
+	deserializer.OnPropertyEnd();
+	return {stream.GetData() + position, size};
+}
+
 void WriteAheadLogDeserializer::ReplayDeleteRowPositions() {
-	auto entry = WALDeleteRowPositions::Deserialize(deserializer);
+	vector<uint32_t> segments;
+	vector<std::span<const data_t>> docs;
+	deserializer.ReadList(101, "groups", [&](Deserializer::List &list, idx_t) {
+		list.ReadObject([&](Deserializer &group) {
+			segments.push_back(group.ReadProperty<uint32_t>(100, "segment"));
+			docs.push_back(ReadBitmap(101, 102));
+		});
+	});
 	if (DeserializeOnly()) {
 		return;
 	}
 	if (!state.current_table && state.current_log_table) {
-		state.current_log_table->ReplayDeleteRowPositions(context, entry);
+		state.current_log_table->ReplayDeleteRowPositions(segments, docs);
 		return;
 	}
 	if (!state.current_table && state.table_storage) {
@@ -2202,12 +2226,19 @@ void WriteAheadLogDeserializer::ReplayDeleteRowPositions() {
 }
 
 void WriteAheadLogDeserializer::ReplayRowPositionMaps() {
-	auto entry = WALRowPositionMaps::Deserialize(deserializer);
+	vector<WALFrozenRowPositionMap> maps;
+	deserializer.ReadList(101, "maps", [&](Deserializer::List &list, idx_t) {
+		list.ReadObject([&](Deserializer &map) {
+			const auto source = map.ReadProperty<uint32_t>(100, "source");
+			const auto target = map.ReadProperty<uint32_t>(101, "target");
+			maps.push_back({.source = source, .target = target, .docs = ReadBitmap(102, 103)});
+		});
+	});
 	if (DeserializeOnly()) {
 		return;
 	}
 	if (!state.current_table && state.current_log_table) {
-		state.current_log_table->ReplayRowPositionMaps(context, entry);
+		state.current_log_table->ReplayRowPositionMaps(maps);
 		return;
 	}
 	if (!state.current_table && state.table_storage) {

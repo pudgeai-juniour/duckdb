@@ -231,18 +231,6 @@ WALCreateView WALCreateView::Deserialize(Deserializer &deserializer) {
 	return result;
 }
 
-void WALDeleteRowPositions::Serialize(Serializer &serializer) const {
-	serializer.WritePropertyWithDefault<vector<uint32_t>>(101, "segments", segments);
-	serializer.WritePropertyWithDefault<vector<string>>(102, "docs", docs);
-}
-
-WALDeleteRowPositions WALDeleteRowPositions::Deserialize(Deserializer &deserializer) {
-	WALDeleteRowPositions result;
-	deserializer.ReadPropertyWithDefault<vector<uint32_t>>(101, "segments", result.segments);
-	deserializer.ReadPropertyWithDefault<vector<string>>(102, "docs", result.docs);
-	return result;
-}
-
 void WALDropDatabase::Serialize(Serializer &serializer) const {
 	serializer.WritePropertyWithDefault<Identifier>(101, "name", name);
 }
@@ -586,30 +574,6 @@ WALReplicationLsn WALReplicationLsn::Deserialize(Deserializer &deserializer) {
 	deserializer.ReadProperty<CatalogType>(104, "type", result.type);
 	deserializer.ReadPropertyWithDefault<bool>(105, "assign", result.assign);
 	deserializer.ReadPropertyWithDefault<idx_t>(106, "relation", result.relation);
-	return result;
-}
-
-void WALRowPositionMap::Serialize(Serializer &serializer) const {
-	serializer.WritePropertyWithDefault<uint32_t>(100, "source", source);
-	serializer.WritePropertyWithDefault<uint32_t>(101, "target", target);
-	serializer.WritePropertyWithDefault<string>(102, "docs", docs);
-}
-
-WALRowPositionMap WALRowPositionMap::Deserialize(Deserializer &deserializer) {
-	WALRowPositionMap result;
-	deserializer.ReadPropertyWithDefault<uint32_t>(100, "source", result.source);
-	deserializer.ReadPropertyWithDefault<uint32_t>(101, "target", result.target);
-	deserializer.ReadPropertyWithDefault<string>(102, "docs", result.docs);
-	return result;
-}
-
-void WALRowPositionMaps::Serialize(Serializer &serializer) const {
-	serializer.WritePropertyWithDefault<vector<WALRowPositionMap>>(101, "maps", maps);
-}
-
-WALRowPositionMaps WALRowPositionMaps::Deserialize(Deserializer &deserializer) {
-	WALRowPositionMaps result;
-	deserializer.ReadPropertyWithDefault<vector<WALRowPositionMap>>(101, "maps", result.maps);
 	return result;
 }
 

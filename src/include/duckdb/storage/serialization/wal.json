@@ -826,53 +826,5 @@
         "type": "vector<string>"
       }
     ]
-  },
-  {
-    "class": "WALDeleteRowPositions",
-    "pointer_type": "none",
-    "members": [
-      {
-        "id": 101,
-        "name": "segments",
-        "type": "vector<uint32_t>"
-      },
-      {
-        "id": 102,
-        "name": "docs",
-        "type": "vector<string>"
-      }
-    ]
-  },
-  {
-    "class": "WALRowPositionMap",
-    "pointer_type": "none",
-    "members": [
-      {
-        "id": 100,
-        "name": "source",
-        "type": "uint32_t"
-      },
-      {
-        "id": 101,
-        "name": "target",
-        "type": "uint32_t"
-      },
-      {
-        "id": 102,
-        "name": "docs",
-        "type": "string"
-      }
-    ]
-  },
-  {
-    "class": "WALRowPositionMaps",
-    "pointer_type": "none",
-    "members": [
-      {
-        "id": 101,
-        "name": "maps",
-        "type": "vector<WALRowPositionMap>"
-      }
-    ]
   }
 ]

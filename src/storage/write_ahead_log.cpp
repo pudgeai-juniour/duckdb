@@ -27,6 +27,8 @@
 #include "duckdb/storage/wal_entry.hpp"
 #include "duckdb/main/attached_database.hpp"
 
+#include <roaring/roaring.h>
+
 namespace duckdb {
 
 constexpr uint64_t WAL_VERSION_NUMBER = 2;
@@ -139,6 +141,10 @@ public:
 		}
 		// buffer data into the memory stream
 		memory_stream.WriteData(buffer, write_size);
+	}
+
+	MemoryStream &Target() {
+		return direct ? *direct : memory_stream;
 	}
 
 	void Flush() {
@@ -286,6 +292,19 @@ public:
 	template <class FUNC>
 	void WriteList(const field_id_t field_id, const char *tag, idx_t count, FUNC func) {
 		serializer.WriteList(field_id, tag, count, func);
+	}
+
+	void WriteBitmap(const field_id_t size_field, const field_id_t docs_field,
+	                 const ::roaring::api::roaring_bitmap_t &bitmap) {
+		const idx_t size = ::roaring::api::roaring_bitmap_frozen_size_in_bytes(&bitmap);
+		serializer.WriteProperty(size_field, "size", size);
+		serializer.OnPropertyBegin(docs_field, "docs");
+		auto &target = checksum_writer.Target();
+		target.GrowCapacity(size);
+		::roaring::api::roaring_bitmap_frozen_serialize(&bitmap,
+		                                                char_ptr_cast(target.GetData() + target.GetPosition()));
+		target.SetPosition(target.GetPosition() + size);
+		serializer.OnPropertyEnd();
 	}
 
 private:
@@ -735,18 +754,30 @@ void WALEntryBuffer::WriteAdoptSegments(vector<string> segments) {
 	entry_count++;
 }
 
-void WALEntryBuffer::WriteDeleteRowPositions(const WALDeleteRowPositions &positions) {
-	D_ASSERT(!positions.segments.empty() && positions.segments.size() == positions.docs.size());
+void WALEntryBuffer::WriteDeleteRowPositions(std::span<const uint32_t> segments,
+                                             std::span<const ::roaring::api::roaring_bitmap_t *const> docs) {
+	D_ASSERT(!segments.empty() && segments.size() == docs.size());
 	WriteAheadLogSerializer serializer(database, stream, WALType::DELETE_ROW_POSITIONS);
-	serializer.WriteEntry(positions);
+	serializer.WriteList(101, "groups", segments.size(), [&](Serializer::List &list, idx_t i) {
+		list.WriteObject([&](Serializer &group) {
+			group.WriteProperty(100, "segment", segments[i]);
+			serializer.WriteBitmap(101, 102, *docs[i]);
+		});
+	});
 	serializer.End();
 	entry_count++;
 }
 
-void WALEntryBuffer::WriteRowPositionMaps(const WALRowPositionMaps &maps) {
-	D_ASSERT(!maps.maps.empty());
+void WALEntryBuffer::WriteRowPositionMaps(std::span<const WALRowPositionMap> maps) {
+	D_ASSERT(!maps.empty());
 	WriteAheadLogSerializer serializer(database, stream, WALType::ROW_POSITION_MAPS);
-	serializer.WriteEntry(maps);
+	serializer.WriteList(101, "maps", maps.size(), [&](Serializer::List &list, idx_t i) {
+		list.WriteObject([&](Serializer &map) {
+			map.WriteProperty(100, "source", maps[i].source);
+			map.WriteProperty(101, "target", maps[i].target);
+			serializer.WriteBitmap(102, 103, *maps[i].docs);
+		});
+	});
 	serializer.End();
 	entry_count++;
 }

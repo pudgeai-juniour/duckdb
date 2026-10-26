@@ -20,6 +20,12 @@
 #include "duckdb/storage/block.hpp"
 
 #include <absl/functional/function_ref.h>
+#include <span>
+
+namespace roaring::api {
+struct roaring_bitmap_s;
+typedef struct roaring_bitmap_s roaring_bitmap_t;
+} // namespace roaring::api
 
 namespace duckdb {
 
@@ -39,10 +45,14 @@ class Transaction;
 class TransactionManager;
 class WriteAheadLogDeserializer;
 struct PersistentCollectionData;
-struct WALDeleteRowPositions;
-struct WALRowPositionMaps;
 
 enum class WALInitState { NO_WAL, UNINITIALIZED, UNINITIALIZED_REQUIRES_TRUNCATE, INITIALIZED };
+
+struct WALRowPositionMap {
+	uint32_t source = 0;
+	uint32_t target = 0;
+	const ::roaring::api::roaring_bitmap_t *docs = nullptr;
+};
 
 class WALEntryBuffer {
 public:
@@ -51,8 +61,9 @@ public:
 	void WriteInsert(DataChunk &chunk);
 	void WriteTruncateTable();
 	void WriteAdoptSegments(vector<string> segments);
-	void WriteDeleteRowPositions(const WALDeleteRowPositions &positions);
-	void WriteRowPositionMaps(const WALRowPositionMaps &maps);
+	void WriteDeleteRowPositions(std::span<const uint32_t> segments,
+	                             std::span<const ::roaring::api::roaring_bitmap_t *const> docs);
+	void WriteRowPositionMaps(std::span<const WALRowPositionMap> maps);
 
 private:
 	friend class WriteAheadLog;
