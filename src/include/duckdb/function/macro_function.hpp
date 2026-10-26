@@ -8,6 +8,7 @@
 
 #pragma once
 
+#include "duckdb/common/enums/sql_compatibility.hpp"
 #include "duckdb/function/function.hpp"
 #include "duckdb/parser/expression/constant_expression.hpp"
 #include "duckdb/parser/query_node.hpp"
@@ -78,7 +79,8 @@ public:
 
 	static MacroBindResult BindMacroFunction(
 	    Binder &binder, const vector<unique_ptr<MacroFunction>> &macro_functions, const Identifier &name,
-	    FunctionExpression &function_expr, vector<unique_ptr<ParsedExpression>> &positional_arguments,
+	    SqlCompatibility compatibility, FunctionExpression &function_expr,
+	    vector<unique_ptr<ParsedExpression>> &positional_arguments,
 	    InsertionOrderPreservingMap<unique_ptr<ParsedExpression>, Identifier, identifier_map_t<idx_t>> &named_arguments,
 	    idx_t depth, optional_ptr<vector<DummyBinding>> lambda_bindings = nullptr,
 	    optional_ptr<ExpressionBinder> argument_binder = nullptr,

@@ -1,6 +1,7 @@
 #include <absl/algorithm/container.h>
 #include <absl/cleanup/cleanup.h>
 
+#include "duckdb/catalog/catalog.hpp"
 #include "duckdb/catalog/catalog_entry/scalar_function_catalog_entry.hpp"
 #include "duckdb/catalog/catalog_entry/scalar_macro_catalog_entry.hpp"
 #include "duckdb/planner/binder.hpp"
@@ -779,8 +780,9 @@ void ExpressionBinder::UnfoldMacroExpression(FunctionExpression &function, Scala
 		bound_arguments.bind_in_place = MacroArgumentsBindInPlace(function, macro_func);
 	}
 	auto bind_result = MacroFunction::BindMacroFunction(
-	    binder, macro_func.macros, macro_func.name, function, positional_arguments, named_arguments, depth,
-	    lambda_bindings, can_bind_arguments ? this : nullptr, can_bind_arguments ? &bound_arguments : nullptr);
+	    binder, macro_func.macros, macro_func.name, macro_func.ParentCatalog().Compatibility(), function,
+	    positional_arguments, named_arguments, depth, lambda_bindings, can_bind_arguments ? this : nullptr,
+	    can_bind_arguments ? &bound_arguments : nullptr);
 	if (!bind_result.error.empty()) {
 		throw BinderException(*expr, bind_result.error);
 	}
