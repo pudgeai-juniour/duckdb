@@ -218,6 +218,11 @@ SELECT percentile_cont(frac := 0.5) WITHIN GROUP (ORDER BY i) FROM generate_seri
 ----
 <REGEX>:Binder Error:.*No function matches.*
 
+statement error
+SELECT percentile_cont(NULL::DOUBLE[]) WITHIN GROUP (ORDER BY i DESC) FROM generate_series(0, 4) tbl(i);
+----
+<REGEX>:Binder Error:.*must not be NULL.*
+
 statement ok
 PRAGMA explain_output='optimized_only';
 
