@@ -14,8 +14,8 @@ public:
 	virtual ~TableLogStorage() = default;
 
 	virtual void ReplayInsert(ClientContext &context, DataChunk &chunk) = 0;
-	virtual void ReplayTruncate(ClientContext &context) = 0;
-	virtual void ReplayAdoptSegments(ClientContext &context, vector<string> segments) = 0;
+	virtual void ReplayTruncate() = 0;
+	virtual void ReplayAdoptSegments(vector<string> segments) = 0;
 	virtual void ReplayDeleteRowPositions(ClientContext &context, const WALDeleteRowPositions &positions) = 0;
 	virtual void ReplayRowPositionMaps(ClientContext &context, const WALRowPositionMaps &maps) = 0;
 };

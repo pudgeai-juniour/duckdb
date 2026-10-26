@@ -2162,7 +2162,7 @@ void WriteAheadLogDeserializer::ReplayTruncateTable() {
 		return;
 	}
 	if (!state.current_table && state.current_log_table) {
-		state.current_log_table->ReplayTruncate(context);
+		state.current_log_table->ReplayTruncate();
 		return;
 	}
 	if (!state.current_table && state.table_storage) {
@@ -2177,7 +2177,7 @@ void WriteAheadLogDeserializer::ReplayAdoptSegments() {
 		return;
 	}
 	if (!state.current_table && state.current_log_table) {
-		state.current_log_table->ReplayAdoptSegments(context, std::move(entry.segments));
+		state.current_log_table->ReplayAdoptSegments(std::move(entry.segments));
 		return;
 	}
 	if (!state.current_table && state.table_storage) {
