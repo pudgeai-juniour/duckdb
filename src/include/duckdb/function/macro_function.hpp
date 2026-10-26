@@ -50,14 +50,9 @@ public:
 	InsertionOrderPreservingMap<unique_ptr<ParsedExpression>, Identifier, identifier_map_t<idx_t>> default_parameters;
 	//! The types of the parameters
 	vector<LogicalType> types;
-	//! Declared return type(s) from RETURNS clause.
-	//! For scalar RETURNS <type>: single entry.
-	//! For RETURNS TABLE(col type, ...): one entry per column.
-	//! Empty when no RETURNS was specified.
 	vector<LogicalType> return_types;
-	//! Declared column names for RETURNS TABLE(name type, ...). Parallel to
-	//! return_types (one entry per column). Empty for scalar RETURNS.
 	vector<string> return_names;
+	string parameter_modes;
 	//! Whether this overload is a procedure (CALL only, not usable in SELECT/FROM)
 	bool is_procedure = false;
 	string source;
@@ -73,6 +68,10 @@ public:
 	vector<LogicalType> ParameterTypes() const;
 	bool HasParameterTypes(const vector<LogicalType> &parameter_types) const;
 	static string ParameterTypesToString(const vector<LogicalType> &parameter_types);
+	static LogicalType WithoutTypmod(const LogicalType &type);
+	static bool IsVoid(const LogicalType &type);
+	static bool ResultNeedsCast(const LogicalType &result, const LogicalType &declared);
+	LogicalType ResultType() const;
 
 	vector<unique_ptr<ParsedExpression>> GetPositionalParametersForSerialization(Serializer &serializer) const;
 	void FinalizeDeserialization();

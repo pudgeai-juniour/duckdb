@@ -7,6 +7,7 @@
 
 #include "duckdb/catalog/catalog_entry/scalar_function_catalog_entry.hpp"
 #include "duckdb/catalog/catalog_entry/scalar_macro_catalog_entry.hpp"
+#include "duckdb/catalog/default/default_types.hpp"
 #include "duckdb/common/string_util.hpp"
 #include "duckdb/function/scalar_macro_function.hpp"
 #include "duckdb/function/table_macro_function.hpp"
@@ -335,6 +336,48 @@ vector<LogicalType> MacroFunction::ParameterTypes() const {
 	return result;
 }
 
+LogicalType MacroFunction::ResultType() const {
+	if (type == MacroType::SCALAR_MACRO && return_types.size() > 1) {
+		child_list_t<LogicalType> fields;
+		for (idx_t i = 0; i < return_types.size(); i++) {
+			fields.emplace_back(Identifier(return_names[i]), return_types[i]);
+		}
+		return LogicalType::STRUCT(std::move(fields));
+	}
+	return return_types.size() == 1 ? return_types[0] : LogicalType::INVALID;
+}
+
+LogicalType MacroFunction::WithoutTypmod(const LogicalType &type) {
+	if (type.HasAlias()) {
+		return type;
+	}
+	if (type.id() == LogicalTypeId::DECIMAL) {
+		return DefaultTypeGenerator::TryDefaultBind("decimal", {});
+	}
+	if (type.id() == LogicalTypeId::TIMESTAMP_SEC || type.id() == LogicalTypeId::TIMESTAMP_MS ||
+	    type.id() == LogicalTypeId::TIMESTAMP_NS) {
+		return LogicalType::TIMESTAMP;
+	}
+	if (type.id() == LogicalTypeId::LIST) {
+		return LogicalType::LIST(WithoutTypmod(ListType::GetChildType(type)));
+	}
+	if (type.id() == LogicalTypeId::ARRAY) {
+		return LogicalType::ARRAY(WithoutTypmod(ArrayType::GetChildType(type)), ArrayType::GetSize(type));
+	}
+	return type;
+}
+
+bool MacroFunction::IsVoid(const LogicalType &type) {
+	return type.id() == LogicalTypeId::SQLNULL && type.GetAlias() == "void";
+}
+
+bool MacroFunction::ResultNeedsCast(const LogicalType &result, const LogicalType &declared) {
+	if (result == declared || declared.id() == LogicalTypeId::ANY || IsVoid(declared)) {
+		return false;
+	}
+	return WithoutTypmod(result) != WithoutTypmod(declared);
+}
+
 bool MacroFunction::HasParameterTypes(const vector<LogicalType> &parameter_types) const {
 	return ParameterTypes() == parameter_types;
 }
@@ -355,6 +398,7 @@ void MacroFunction::CopyProperties(MacroFunction &other) const {
 	other.types = types;
 	other.return_types = return_types;
 	other.return_names = return_names;
+	other.parameter_modes = parameter_modes;
 	other.is_procedure = is_procedure;
 	other.source = source;
 }

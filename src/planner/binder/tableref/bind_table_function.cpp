@@ -11,6 +11,7 @@
 #include "duckdb/parser/statement/select_statement.hpp"
 #include "duckdb/parser/tableref/subqueryref.hpp"
 #include "duckdb/parser/tableref/table_function_ref.hpp"
+#include "duckdb/function/macro_function.hpp"
 #include "duckdb/planner/binder.hpp"
 #include "duckdb/planner/expression_binder/table_function_binder.hpp"
 #include "duckdb/planner/operator/logical_get.hpp"
@@ -190,6 +191,19 @@ static Identifier ApplyPostgresSetofAliasCompatibility(const BaseTableFunction &
 	}
 	auto original_name = return_names[0];
 	return_names[0] = ref.alias;
+	return original_name;
+}
+
+static Identifier ApplyPostgresBaseResultAlias(const MacroFunction &definition, const TableFunctionRef &ref,
+                                               vector<Identifier> &names) {
+	if (definition.return_types.size() != 1 || ref.alias.empty() || !ref.column_name_alias.empty() || names.empty()) {
+		return Identifier();
+	}
+	if (!definition.return_names.empty()) {
+		return ref.alias;
+	}
+	auto original_name = names[0];
+	names[0] = ref.alias;
 	return original_name;
 }
 
@@ -405,6 +419,18 @@ BoundStatement Binder::BindTableFunction(TableFunction &function, vector<Value> 
 	                                 std::move(input_table_types), std::move(input_table_names), nullptr);
 }
 
+static vector<LogicalType> ReturnTypesOf(const BoundStatement &query, const vector<LogicalType> &return_types) {
+	auto targets = query.types;
+	if (return_types.size() <= targets.size()) {
+		for (idx_t i = 0; i < return_types.size(); i++) {
+			if (MacroFunction::ResultNeedsCast(targets[i], return_types[i])) {
+				targets[i] = return_types[i];
+			}
+		}
+	}
+	return targets;
+}
+
 BoundStatement Binder::Bind(TableFunctionRef &ref) {
 	QueryErrorContext error_context(ref.query_location);
 
@@ -462,7 +488,8 @@ BoundStatement Binder::Bind(TableFunctionRef &ref) {
 			throw BinderException("%s() is a procedure\nHINT: To call a procedure, use CALL.",
 			                      fexpr.FunctionName().GetIdentifierName());
 		}
-		auto query_node = BindTableMacro(fexpr, macro_func, 0);
+		optional_ptr<MacroFunction> definition;
+		auto query_node = BindTableMacro(fexpr, macro_func, 0, definition);
 		D_ASSERT(query_node);
 
 		auto binder_child = Binder::CreateBinder(context, this);
@@ -476,11 +503,16 @@ BoundStatement Binder::Bind(TableFunctionRef &ref) {
 			error.AddQueryLocation(ref);
 			error.Throw();
 		}
+		auto targets = ReturnTypesOf(query, definition->return_types);
+		query.plan = CastLogicalOperatorToTypes(query.types, targets, std::move(query.plan));
+		query.types = std::move(targets);
+		auto base_column_name = ApplyPostgresBaseResultAlias(*definition, ref, query.names);
 		auto bind_index = query.plan->GetRootIndex();
 		string alias =
 		    (ref.alias.empty() ? "unnamed_query" + to_string(bind_index.index) : ref.alias.GetIdentifierName());
 		// remember ref here is TableFunctionRef and NOT base class
 		bind_context.AddSubquery(bind_index, Identifier(alias), ref, query);
+		AddPostgresSetofColumnAlias(bind_context, bind_index, base_column_name);
 		MoveCorrelatedExpressions(*binder_child);
 		return query;
 	}

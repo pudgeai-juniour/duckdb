@@ -1,5 +1,4 @@
 #include "duckdb/parser/peg/ast/macro_parameter.hpp"
-#include "duckdb/catalog/default/default_types.hpp"
 #include "duckdb/parser/expression/columnref_expression.hpp"
 #include "duckdb/function/table_macro_function.hpp"
 #include "duckdb/parser/tableref/expressionlistref.hpp"
@@ -17,8 +16,14 @@
 #include "duckdb/parser/expression/parameter_expression.hpp"
 #include "duckdb/parser/expression/columnref_expression.hpp"
 #include "duckdb/parser/expression/subquery_expression.hpp"
+#include "duckdb/parser/expression/function_expression.hpp"
+#include "duckdb/parser/expression/star_expression.hpp"
+#include "duckdb/parser/expression/type_expression.hpp"
 #include "duckdb/parser/parsed_expression_iterator.hpp"
+#include "duckdb/parser/tableref/emptytableref.hpp"
+#include "duckdb/parser/tableref/subqueryref.hpp"
 #include "duckdb/planner/table_binding.hpp"
+#include "duckdb/common/string_util.hpp"
 
 #include <charconv>
 
@@ -175,6 +180,7 @@ static void ApplyFunctionDecorators(PEGTransformer &transformer, RepeatParseResu
 					macro_function.return_names.push_back(entry.first.GetIdentifierName());
 					macro_function.return_types.push_back(std::move(entry.second));
 				}
+				info.returns_set = true;
 			} else if (returns_name == "ReturnsNull") {
 				// RETURNS NULL ON NULL INPUT -- a strictness marker, not a return type.
 			} else {
@@ -186,6 +192,52 @@ static void ApplyFunctionDecorators(PEGTransformer &transformer, RepeatParseResu
 		}
 		// Other decorators (volatility, strict, security, cost, rows, parallel, leakproof) are accepted for PG-syntax
 		// compat but their semantics are dropped.
+	}
+}
+
+static void MoveMacroProperties(MacroFunction &source, MacroFunction &target) {
+	const auto type = target.type;
+	source.CopyProperties(target);
+	target.type = type;
+}
+
+static unique_ptr<MacroFunction> TableMacro(MacroFunction &source, unique_ptr<QueryNode> query_node) {
+	auto table_macro = make_uniq<TableMacroFunction>();
+	table_macro->query_node = std::move(query_node);
+	MoveMacroProperties(source, *table_macro);
+	return std::move(table_macro);
+}
+
+static const Identifier &TypeName(const LogicalType &type) {
+	return UnboundType::GetTypeExpression(type)->Cast<TypeExpression>().GetTypeName();
+}
+
+static bool IsSameResultType(const LogicalType &declared, const LogicalType &output) {
+	if (declared.IsUnbound() || output.IsUnbound()) {
+		return declared.IsUnbound() && output.IsUnbound() && TypeName(declared) == TypeName(output);
+	}
+	if (MacroFunction::WithoutTypmod(declared).id() != MacroFunction::WithoutTypmod(output).id() ||
+	    declared.GetAlias() != output.GetAlias()) {
+		return false;
+	}
+	if (declared.id() == LogicalTypeId::LIST) {
+		return IsSameResultType(ListType::GetChildType(declared), ListType::GetChildType(output));
+	}
+	return declared.id() != LogicalTypeId::ARRAY ||
+	       IsSameResultType(ArrayType::GetChildType(declared), ArrayType::GetChildType(output));
+}
+
+static void CheckOutputResultType(const LogicalType &declared, const vector<LogicalType> &output_types) {
+	if (output_types.size() > 1) {
+		if (!declared.IsUnbound() || TypeName(declared) != "record") {
+			throw ParserException("function result type must be record because of OUT parameters");
+		}
+		return;
+	}
+	const auto output = UnboundType::TryDefaultBind(output_types[0]);
+	if (!IsSameResultType(UnboundType::TryDefaultBind(declared), output)) {
+		throw ParserException("function result type must be %s because of OUT parameters",
+		                      StringUtil::Lower(output.ToString()));
 	}
 }
 
@@ -224,12 +276,16 @@ unique_ptr<MacroFunction> PEGTransformerFactory::TransformMacroDefinition(PEGTra
 	if (!parameters.empty()) {
 		bool default_value_found = false;
 		identifier_set_t parameter_names;
+		vector<string> output_names;
+		vector<LogicalType> output_types;
 		for (auto &parameter : parameters) {
 			if (parameter.ambiguous_bare_type) {
 				if (sql_body) {
-					auto pos_name = Identifier("$" + std::to_string(macro_function->parameters.size() + 1));
-					auto builtin = DefaultTypeGenerator::GetDefaultType(parameter.name);
-					parameter.type = builtin.id() != LogicalTypeId::INVALID ? builtin : LogicalType::UNKNOWN;
+					auto pos_name = parameter.mode == 'o'
+					                    ? Identifier("column" + std::to_string(output_names.size() + 1))
+					                    : Identifier("$" + std::to_string(macro_function->parameters.size() + 1));
+					parameter.type = LogicalType::UNBOUND(
+					    make_uniq<TypeExpression>(parameter.name, vector<unique_ptr<ParsedExpression>>()));
 					parameter.name = pos_name;
 					parameter.expression = make_uniq<ColumnRefExpression>(pos_name);
 				} else {
@@ -242,6 +298,16 @@ unique_ptr<MacroFunction> PEGTransformerFactory::TransformMacroDefinition(PEGTra
 				                      parameter.name.GetIdentifierName());
 			}
 			parameter_names.insert(parameter.name);
+			macro_function->parameter_modes.push_back(parameter.mode);
+			if (parameter.mode != 'i') {
+				output_names.push_back(parameter.ambiguous_bare_type && sql_body
+				                           ? "column" + std::to_string(output_names.size() + 1)
+				                           : parameter.name.GetIdentifierName());
+				output_types.push_back(parameter.type);
+			}
+			if (parameter.mode == 'o') {
+				continue;
+			}
 			if (parameter.is_default) {
 				auto default_expr = std::move(parameter.expression);
 				default_expr->SetAlias(parameter.name);
@@ -256,11 +322,24 @@ unique_ptr<MacroFunction> PEGTransformerFactory::TransformMacroDefinition(PEGTra
 			}
 			macro_function->types.push_back(parameter.type);
 		}
+		if (output_names.empty()) {
+			macro_function->parameter_modes.clear();
+		} else {
+			if (!macro_function->return_names.empty()) {
+				throw ParserException("OUT and INOUT arguments aren't allowed in TABLE functions");
+			}
+			if (!macro_function->return_types.empty()) {
+				CheckOutputResultType(macro_function->return_types[0], output_types);
+			}
+			macro_function->return_names = std::move(output_names);
+			macro_function->return_types = std::move(output_types);
+		}
 	}
 
 	// PG-style SQL body: when LANGUAGE was specified AND the body is a string constant scalar macro (parsed via
 	// `AS 'SELECT ...'`), re-parse the string as SQL and replace the scalar body with the parsed query node.
-	if (decorator_info.has_language && macro_function->type == MacroType::SCALAR_MACRO) {
+	if (decorator_info.has_language && macro_function->type == MacroType::SCALAR_MACRO &&
+	    body_choice.Name() == "AsMacroBody") {
 		auto &scalar = macro_function->Cast<ScalarMacroFunction>();
 		if (scalar.expression && scalar.expression->GetExpressionClass() == ExpressionClass::CONSTANT) {
 			auto &literal = scalar.expression->Cast<ConstantExpression>().GetLiteral();
@@ -289,18 +368,25 @@ unique_ptr<MacroFunction> PEGTransformerFactory::TransformMacroDefinition(PEGTra
 				default:
 					throw ParserException("Unsupported statement type in SQL function/procedure body: %s", body_string);
 				}
-				auto table_macro = make_uniq<TableMacroFunction>();
-				table_macro->query_node = std::move(body_node);
-				table_macro->return_types = std::move(macro_function->return_types);
-				table_macro->return_names = std::move(macro_function->return_names);
-				table_macro->parameters = std::move(macro_function->parameters);
-				table_macro->default_parameters = std::move(macro_function->default_parameters);
-				table_macro->types = std::move(macro_function->types);
-				table_macro->is_procedure = macro_function->is_procedure;
+				auto table_macro = TableMacro(*macro_function, std::move(body_node));
 				table_macro->source = body_string;
 				macro_function = std::move(table_macro);
 			}
 		}
+	}
+
+	if (decorator_info.returns_set && macro_function->type == MacroType::SCALAR_MACRO) {
+		auto &scalar = macro_function->Cast<ScalarMacroFunction>();
+		auto row = make_uniq<SelectNode>();
+		if (scalar.return_names.size() > 1) {
+			auto fields = make_uniq<StarExpression>();
+			fields->ExpressionMutable() = std::move(scalar.expression);
+			row->select_list.emplace_back(std::move(fields));
+		} else {
+			row->select_list.emplace_back(std::move(scalar.expression));
+		}
+		row->from_table = make_uniq<EmptyTableRef>();
+		macro_function = TableMacro(*macro_function, std::move(row));
 	}
 
 	// Replace any positional $N references in the body with named ColumnRefs keyed off the parameter list. Must run
@@ -311,26 +397,36 @@ unique_ptr<MacroFunction> PEGTransformerFactory::TransformMacroDefinition(PEGTra
 		transformer.ClearParameters();
 	}
 
-	const bool is_scalar_returns =
-	    !macro_function->return_types.empty() && macro_function->return_names.empty() && !decorator_info.returns_set;
+	const bool is_scalar_returns = !macro_function->return_types.empty() && !decorator_info.returns_set;
 	if (is_scalar_returns && macro_function->type == MacroType::TABLE_MACRO) {
 		auto &table_macro = macro_function->Cast<TableMacroFunction>();
 		if (table_macro.query_node) {
 			auto inner_stmt = make_uniq<SelectStatement>();
 			inner_stmt->node = std::move(table_macro.query_node);
+			if (table_macro.return_names.size() > 1) {
+				vector<unique_ptr<ParsedExpression>> fields;
+				const Identifier record_alias("0_record");
+				auto body_ref = make_uniq<SubqueryRef>(std::move(inner_stmt), record_alias);
+				for (auto &name : table_macro.return_names) {
+					auto field = make_uniq<ColumnRefExpression>(Identifier(name), record_alias);
+					field->SetAlias(Identifier(name));
+					fields.emplace_back(std::move(field));
+					body_ref->column_name_alias.emplace_back(name);
+				}
+				auto record = make_uniq<SelectNode>();
+				record->select_list.emplace_back(
+				    make_uniq<FunctionExpression>(Identifier("struct_pack"), std::move(fields)));
+				record->from_table = std::move(body_ref);
+				inner_stmt = make_uniq<SelectStatement>();
+				inner_stmt->node = std::move(record);
+			}
 			auto subquery = make_uniq<SubqueryExpression>();
 			subquery->SubqueryMutable() = std::move(inner_stmt);
 			subquery->GetSubqueryTypeMutable() = SubqueryType::SCALAR;
 
 			auto scalar_macro = make_uniq<ScalarMacroFunction>(std::move(subquery));
 			scalar_macro->query_body = true;
-			scalar_macro->parameters = std::move(table_macro.parameters);
-			scalar_macro->types = std::move(table_macro.types);
-			scalar_macro->default_parameters = std::move(table_macro.default_parameters);
-			scalar_macro->return_types = std::move(table_macro.return_types);
-			scalar_macro->return_names = std::move(table_macro.return_names);
-			scalar_macro->is_procedure = table_macro.is_procedure;
-			scalar_macro->source = std::move(table_macro.source);
+			MoveMacroProperties(table_macro, *scalar_macro);
 			macro_function = std::move(scalar_macro);
 		}
 	}
@@ -378,6 +474,30 @@ unique_ptr<MacroFunction> PEGTransformerFactory::TransformReturnMacroBody(PEGTra
 vector<MacroParameter> PEGTransformerFactory::TransformMacroParameters(PEGTransformer &transformer,
                                                                        vector<MacroParameter> macro_parameter) {
 	return macro_parameter;
+}
+
+char PEGTransformerFactory::TransformInArgMode(PEGTransformer &transformer) {
+	return 'i';
+}
+
+char PEGTransformerFactory::TransformOutArgMode(PEGTransformer &transformer) {
+	return 'o';
+}
+
+char PEGTransformerFactory::TransformInoutArgMode(PEGTransformer &transformer) {
+	return 'b';
+}
+
+char PEGTransformerFactory::TransformVariadicArgMode(PEGTransformer &transformer) {
+	throw NotImplementedException("VARIADIC parameters are not supported");
+}
+
+MacroParameter PEGTransformerFactory::TransformModeParameter(PEGTransformer &transformer, char func_arg_mode,
+                                                             const Identifier &type_func_name,
+                                                             const optional<LogicalType> &type) {
+	auto result = TransformSimpleParameter(transformer, type_func_name, type);
+	result.mode = func_arg_mode;
+	return result;
 }
 
 MacroParameter PEGTransformerFactory::TransformSimpleParameter(PEGTransformer &transformer,

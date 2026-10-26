@@ -5,6 +5,7 @@
 #include "duckdb/catalog/catalog_entry/scalar_function_catalog_entry.hpp"
 #include "duckdb/catalog/catalog_entry/scalar_macro_catalog_entry.hpp"
 #include "duckdb/planner/binder.hpp"
+#include "duckdb/planner/expression/bound_cast_expression.hpp"
 #include "duckdb/parser/expression/columnref_expression.hpp"
 #include "duckdb/catalog/entry_lookup_info.hpp"
 #include "duckdb/common/enums/expression_type.hpp"
@@ -766,9 +767,10 @@ void ExpressionBinder::AddSqlFunctionParameters(unique_ptr<ParsedExpression> &ex
 	add_limit(*body);
 }
 
-void ExpressionBinder::UnfoldMacroExpression(FunctionExpression &function, ScalarMacroCatalogEntry &macro_func,
-                                             unique_ptr<ParsedExpression> &expr, idx_t depth,
-                                             vector<unique_ptr<Expression>> &shared_arguments) {
+ScalarMacroFunction &ExpressionBinder::UnfoldMacroExpression(FunctionExpression &function,
+                                                             ScalarMacroCatalogEntry &macro_func,
+                                                             unique_ptr<ParsedExpression> &expr, idx_t depth,
+                                                             vector<unique_ptr<Expression>> &shared_arguments) {
 	// validate the arguments and separate positional and default arguments
 	vector<unique_ptr<ParsedExpression>> positional_arguments;
 	InsertionOrderPreservingMap<unique_ptr<ParsedExpression>, Identifier, identifier_map_t<idx_t>> named_arguments;
@@ -889,7 +891,7 @@ void ExpressionBinder::UnfoldMacroExpression(FunctionExpression &function, Scala
 	if (macro_def.query_body && !is_window) {
 		D_ASSERT(shared_names.empty());
 		ExpandSqlFunctionBody(*new_macro_binding, positional_arguments, expr);
-		return;
+		return macro_def;
 	}
 
 	// now replace the parameters
@@ -897,7 +899,7 @@ void ExpressionBinder::UnfoldMacroExpression(FunctionExpression &function, Scala
 	vector<identifier_set_t> lambda_params;
 	ReplaceMacroParameters(expr, lambda_params);
 	if (shared_names.empty()) {
-		return;
+		return macro_def;
 	}
 	binder.global_binder_state->shared_macro_arguments += shared_names.size();
 	auto alias = expr->GetAlias();
@@ -912,6 +914,7 @@ void ExpressionBinder::UnfoldMacroExpression(FunctionExpression &function, Scala
 	    std::move(invoke_arguments));
 	expr->SetAlias(std::move(alias));
 	expr->SetQueryLocation(query_location);
+	return macro_def;
 }
 
 BindResult ExpressionBinder::BindMacro(FunctionExpression &function, ScalarMacroCatalogEntry &macro_func, idx_t depth,
@@ -930,7 +933,8 @@ BindResult ExpressionBinder::BindMacro(FunctionExpression &function, ScalarMacro
 
 	// unfold the macro expression
 	vector<unique_ptr<Expression>> shared_arguments;
-	UnfoldMacroExpression(function, macro_func, expr, depth, shared_arguments);
+	auto &macro_def = UnfoldMacroExpression(function, macro_func, expr, depth, shared_arguments);
+	BindResult result;
 	if (shared_arguments.empty()) {
 		// bind the unfolded macro
 		auto outer_lambda_bindings = lambda_bindings;
@@ -940,34 +944,44 @@ BindResult ExpressionBinder::BindMacro(FunctionExpression &function, ScalarMacro
 		if (constant_candidate) {
 			lambda_bindings = nullptr;
 		}
-		auto result = BindExpression(expr, depth);
-		if (constant_candidate && !result.HasError() && result.expression->IsFoldable() &&
-		    !result.expression->IsVolatile()) {
-			Value value;
-			if (ExpressionExecutor::TryEvaluateFoldable(context, *result.expression, value)) {
-				constant_macros.emplace(&macro_func, value);
-				return BindResult(make_uniq<BoundConstantExpression>(std::move(value)));
-			}
+		result = BindExpression(expr, depth);
+	} else {
+		auto &invoke = expr->Cast<FunctionExpression>();
+		auto &invoke_entry =
+		    GetCatalogEntry(EntryLookupInfo(CatalogType::SCALAR_FUNCTION_ENTRY, invoke.GetQualifiedName()),
+		                    OnEntryNotFound::THROW_EXCEPTION)
+		        ->Cast<ScalarFunctionCatalogEntry>();
+		vector<unique_ptr<Expression>> children;
+		vector<LogicalType> child_types;
+		children.reserve(shared_arguments.size() + 1);
+		child_types.reserve(shared_arguments.size() + 1);
+		children.push_back(nullptr);
+		child_types.push_back(LogicalType::LAMBDA);
+		for (auto &argument : shared_arguments) {
+			child_types.push_back(argument->GetReturnType());
+			children.push_back(std::move(argument));
 		}
+		auto &lambda = invoke.GetArgumentsMutable()[0].GetExpressionMutable()->Cast<LambdaExpression>();
+		result =
+		    BindLambdaFunction(invoke, invoke_entry, lambda, 0, std::move(children), std::move(child_types), depth);
+	}
+	if (result.HasError()) {
 		return result;
 	}
-
-	auto &invoke = expr->Cast<FunctionExpression>();
-	auto &invoke_entry = GetCatalogEntry(EntryLookupInfo(CatalogType::SCALAR_FUNCTION_ENTRY, invoke.GetQualifiedName()),
-	                                     OnEntryNotFound::THROW_EXCEPTION)
-	                         ->Cast<ScalarFunctionCatalogEntry>();
-	vector<unique_ptr<Expression>> children;
-	vector<LogicalType> child_types;
-	children.reserve(shared_arguments.size() + 1);
-	child_types.reserve(shared_arguments.size() + 1);
-	children.push_back(nullptr);
-	child_types.push_back(LogicalType::LAMBDA);
-	for (auto &argument : shared_arguments) {
-		child_types.push_back(argument->GetReturnType());
-		children.push_back(std::move(argument));
+	if (!macro_def.return_types.empty()) {
+		auto declared = macro_def.ResultType();
+		if (MacroFunction::ResultNeedsCast(result.expression->GetReturnType(), declared)) {
+			result.expression = BoundCastExpression::AddCastToType(context, std::move(result.expression), declared);
+		}
 	}
-	auto &lambda = invoke.GetArgumentsMutable()[0].GetExpressionMutable()->Cast<LambdaExpression>();
-	return BindLambdaFunction(invoke, invoke_entry, lambda, 0, std::move(children), std::move(child_types), depth);
+	if (constant_candidate && result.expression->IsFoldable() && !result.expression->IsVolatile()) {
+		Value value;
+		if (ExpressionExecutor::TryEvaluateFoldable(context, *result.expression, value)) {
+			constant_macros.emplace(&macro_func, value);
+			return BindResult(make_uniq<BoundConstantExpression>(std::move(value)));
+		}
+	}
+	return result;
 }
 
 } // namespace duckdb
