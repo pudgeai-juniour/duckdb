@@ -504,6 +504,10 @@ Expression:
     - FilterClauseExpression
     - FilterClauseContents
     - ParenthesisExpression
+    - OverlapsTail
+    - OverlapsRow
+    - OverlapsRowExpression
+    - OverlapsParenthesisExpression
     - Indirection
     - CastOperator
     - DotOperator

@@ -499,17 +499,53 @@ PEGTransformerFactory::TransformFilterClauseContents(PEGTransformer &transformer
 	return expression;
 }
 
-unique_ptr<ParsedExpression>
-PEGTransformerFactory::TransformParenthesisExpression(PEGTransformer &transformer,
-                                                      optional<vector<unique_ptr<ParsedExpression>>> expression) {
-	// ParenthesisExpression <- Parens(List(Expression)?)
-	// Python-style tuples: (), (x,) and (a, b, ...) all build an (unnamed) row/TUPLE.
-	// A single (x) without a trailing comma is grouping and is handled earlier by ParensExpression.
+static unique_ptr<ParsedExpression> MakeRow(optional<vector<unique_ptr<ParsedExpression>>> expression,
+                                            optional<unique_ptr<ParsedExpression>> overlaps_tail) {
 	vector<unique_ptr<ParsedExpression>> children;
 	if (expression) {
 		children = std::move(*expression);
 	}
-	return make_uniq<FunctionExpression>("row", std::move(children));
+	unique_ptr<ParsedExpression> row = make_uniq<FunctionExpression>("row", std::move(children));
+	if (!overlaps_tail) {
+		return row;
+	}
+	auto &left = row->Cast<FunctionExpression>().GetArgumentsMutable();
+	auto &right = (*overlaps_tail)->Cast<FunctionExpression>().GetArgumentsMutable();
+	if (left.size() != 2) {
+		throw ParserException("wrong number of parameters on left side of OVERLAPS expression");
+	}
+	if (right.size() != 2) {
+		throw ParserException("wrong number of parameters on right side of OVERLAPS expression");
+	}
+	for (auto &bound : right) {
+		left.push_back(std::move(bound));
+	}
+	return make_uniq<FunctionExpression>("overlaps", std::move(left));
+}
+
+unique_ptr<ParsedExpression>
+PEGTransformerFactory::TransformParenthesisExpression(PEGTransformer &transformer,
+                                                      optional<vector<unique_ptr<ParsedExpression>>> expression,
+                                                      optional<unique_ptr<ParsedExpression>> overlaps_tail) {
+	// Python-style tuples: (), (x,) and (a, b, ...) all build an (unnamed) row/TUPLE.
+	// A single (x) without a trailing comma is grouping and is handled earlier by ParensExpression.
+	return MakeRow(std::move(expression), std::move(overlaps_tail));
+}
+
+unique_ptr<ParsedExpression> PEGTransformerFactory::TransformOverlapsTail(PEGTransformer &transformer,
+                                                                          unique_ptr<ParsedExpression> overlaps_row) {
+	return overlaps_row;
+}
+
+unique_ptr<ParsedExpression>
+PEGTransformerFactory::TransformOverlapsRowExpression(PEGTransformer &transformer,
+                                                      optional<vector<unique_ptr<ParsedExpression>>> expression) {
+	return MakeRow(std::move(expression), optional<unique_ptr<ParsedExpression>>());
+}
+
+unique_ptr<ParsedExpression> PEGTransformerFactory::TransformOverlapsParenthesisExpression(
+    PEGTransformer &transformer, optional<vector<unique_ptr<ParsedExpression>>> expression) {
+	return MakeRow(std::move(expression), optional<unique_ptr<ParsedExpression>>());
 }
 
 void PEGTransformerFactory::RemoveOrderQualificationRecursive(unique_ptr<ParsedExpression> &root_expr) {
@@ -2777,12 +2813,9 @@ PEGTransformerFactory::TransformNullIfArguments(PEGTransformer &transformer, uni
 
 unique_ptr<ParsedExpression>
 PEGTransformerFactory::TransformRowExpression(PEGTransformer &transformer,
-                                              optional<vector<unique_ptr<ParsedExpression>>> expression) {
-	if (!expression) {
-		return make_uniq<FunctionExpression>("row", vector<unique_ptr<ParsedExpression>>());
-	}
-	auto func_expr = make_uniq<FunctionExpression>("row", std::move(*expression));
-	return std::move(func_expr);
+                                              optional<vector<unique_ptr<ParsedExpression>>> expression,
+                                              optional<unique_ptr<ParsedExpression>> overlaps_tail) {
+	return MakeRow(std::move(expression), std::move(overlaps_tail));
 }
 
 unique_ptr<ParsedExpression>

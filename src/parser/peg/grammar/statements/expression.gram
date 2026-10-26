@@ -27,7 +27,7 @@ IgnoreOrRespectNulls <- IgnoreNulls / RespectNulls
 IgnoreNulls <- 'IGNORE' 'NULLS'
 RespectNulls <- 'RESPECT' 'NULLS'
 
-ParenthesisExpression <- Parens(List(Expression)?)
+ParenthesisExpression <- Parens(List(Expression)?) OverlapsTail?
 LiteralExpression <- StringLiteral / NumberLiteral / ConstantLiteral
 ConstantLiteral <- NullLiteral / TrueLiteral / FalseLiteral
 NullLiteral <- 'NULL'
@@ -127,6 +127,11 @@ ListComprehensionExpression <- '[' Expression 'FOR' List(ColIdOrString) 'IN' Exp
 ListComprehensionFilter <- 'IF' Expression
 
 ParensExpression <- Parens(Expression)
+
+OverlapsTail <- 'OVERLAPS' OverlapsRow
+OverlapsRow <- OverlapsRowExpression / OverlapsParenthesisExpression
+OverlapsRowExpression <- 'ROW' Parens(List(Expression)?)
+OverlapsParenthesisExpression <- Parens(List(Expression)?)
 
 # RUNNING and FINAL say how much of a MATCH_RECOGNIZE match the call below them reads. They are only
 # meaningful in MEASURES, which is where the binder checks for them.
@@ -328,7 +333,7 @@ NullIfExpression <- 'NULLIF' Parens(NullIfArguments)
 NullIfArguments <- Expression ',' Expression
 PositionExpression <- 'POSITION' Parens(PositionArguments)
 PositionArguments <- OtherOperatorExpression 'IN' Expression
-RowExpression <- 'ROW' Parens(List(Expression)?)
+RowExpression <- 'ROW' Parens(List(Expression)?) OverlapsTail?
 SubstringExpression <- 'SUBSTRING' Parens(SubstringArguments)
 SubstringArguments <- SubstringParameters / SubstringExpressionList
 SubstringExpressionList <- List(Expression)
