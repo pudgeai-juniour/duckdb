@@ -107,9 +107,24 @@ struct MapCastNode {
 	int64_t implicit_cast_cost;
 };
 
+static bool HasFamilyKey(LogicalTypeId id) {
+	switch (id) {
+	case LogicalTypeId::LIST:
+	case LogicalTypeId::STRUCT:
+	case LogicalTypeId::TUPLE:
+	case LogicalTypeId::MAP:
+	case LogicalTypeId::UNION:
+	case LogicalTypeId::ARRAY:
+	case LogicalTypeId::DECIMAL:
+	case LogicalTypeId::ENUM:
+		return true;
+	default:
+		return false;
+	}
+}
+
 template <class MAP>
 static auto RelaxedTypeMatch(MAP &map, const LogicalType &type) -> decltype(map.find(type)) {
-	D_ASSERT(map.find(type) == map.end()); // we shouldn't be here
 	switch (type.id()) {
 	case LogicalTypeId::LIST:
 		return map.find(LogicalType::LIST(LogicalType::ANY));
@@ -157,14 +172,21 @@ public:
 
 		auto &source_type_entries = source_type_id_entry->second;
 		auto source_type_entry = source_type_entries.find(source);
-		if (source_type_entry == source_type_entries.end()) {
-			source_type_entry = RelaxedTypeMatch(source_type_entries, source);
-			if (source_type_entry == source_type_entries.end()) {
-				return nullptr;
+		if (source_type_entry != source_type_entries.end()) {
+			auto entry = GetTargetEntry(source_type_entry->second, target);
+			if (entry || !HasFamilyKey(source.id())) {
+				return entry;
 			}
 		}
+		source_type_entry = RelaxedTypeMatch(source_type_entries, source);
+		if (source_type_entry == source_type_entries.end()) {
+			return nullptr;
+		}
+		return GetTargetEntry(source_type_entry->second, target);
+	}
 
-		auto &target_type_id_entries = source_type_entry->second;
+	static optional_ptr<const MapCastNode>
+	GetTargetEntry(const type_id_map_t<type_map_t<MapCastNode>> &target_type_id_entries, const LogicalType &target) {
 		auto target_type_id_entry = target_type_id_entries.find(target.id());
 		if (target_type_id_entry == target_type_id_entries.end()) {
 			target_type_id_entry = target_type_id_entries.find(LogicalTypeId::ANY);
@@ -236,8 +258,8 @@ int64_t CastFunctionSet::ImplicitCastCost(optional_ptr<ClientContext> context, c
 	if (registration_probe && registration_probe->HasRegisteredCast(source, target)) {
 		registered_cast_found = true;
 	}
-	// check if a cast has been registered
-	if (map_info) {
+	// check if a cast has been registered - a type never casts to itself, so none applies to it
+	if (map_info && source != target) {
 		auto entry = map_info->GetEntry(source, target);
 		if (entry) {
 			return entry->implicit_cast_cost;
