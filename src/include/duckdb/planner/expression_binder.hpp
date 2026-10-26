@@ -346,6 +346,7 @@ protected:
 	ClientContext &context;
 	vector<BoundColumnReferenceInfo> bound_columns;
 	bool inside_try = false;
+	bool whole_row_call = false;
 
 	BindResult TryBindLambdaOrJson(FunctionExpression &function, idx_t depth, CatalogEntry &func,
 	                               const LambdaSyntaxType syntax_type);

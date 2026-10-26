@@ -31,6 +31,7 @@ struct BoundUnnestNode {
 	TableIndex index;
 	//! The set of expressions
 	vector<unique_ptr<Expression>> expressions;
+	vector<pair<unique_ptr<ParsedExpression>, unique_ptr<Expression>>> calls;
 };
 
 using BoundUnnestMap = unordered_map<idx_t, BoundUnnestNode>;

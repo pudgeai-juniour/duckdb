@@ -183,7 +183,15 @@ BindResult ExpressionBinder::BindExpression(OperatorExpression &op, idx_t depth)
 		children.push_back(BindChild(op.GetChildrenMutable()[0], depth, error));
 		inside_try = false;
 	} else {
-		for (idx_t i = 0; i < op.GetChildrenMutable().size(); i++) {
+		idx_t first = 0;
+		if (operator_type == ExpressionType::STRUCT_EXTRACT &&
+		    op.GetChildrenMutable()[0]->GetExpressionClass() == ExpressionClass::FUNCTION) {
+			whole_row_call = true;
+			children.push_back(BindChild(op.GetChildrenMutable()[0], depth, error));
+			whole_row_call = false;
+			first = 1;
+		}
+		for (idx_t i = first; i < op.GetChildrenMutable().size(); i++) {
 			children.push_back(BindChild(op.GetChildrenMutable()[i], depth, error));
 		}
 	}

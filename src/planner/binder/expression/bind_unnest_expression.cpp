@@ -2,6 +2,7 @@
 #include "duckdb/function/builtin_function_lookup.hpp"
 #include "duckdb/function/scalar/struct_functions.hpp"
 #include "duckdb/main/client_context.hpp"
+#include "duckdb/parser/expression/constant_expression.hpp"
 #include "duckdb/parser/expression/function_expression.hpp"
 #include "duckdb/planner/expression/bound_aggregate_expression.hpp"
 #include "duckdb/planner/expression/bound_columnref_expression.hpp"
@@ -149,6 +150,7 @@ BindResult UnnestBinder::Bind(FunctionExpression &function, idx_t depth, bool ro
 	bool recursive = false;
 	optional_idx max_depth_opt;
 	bool keep_parent_names = false;
+	bool set_returning = false;
 	for (idx_t i = num_list_args; i < args.size(); i++) {
 		if (args[i].GetExpression().HasParameter()) {
 			throw ParameterNotAllowedException("Parameter not allowed in unnest parameter");
@@ -168,6 +170,8 @@ BindResult UnnestBinder::Bind(FunctionExpression &function, idx_t depth, bool ro
 			}
 		} else if (alias == "keep_parent_names") {
 			keep_parent_names = value.GetValue<bool>();
+		} else if (alias == "set_returning") {
+			set_returning = value.GetValue<bool>();
 		} else {
 			throw BinderException("Unsupported parameter \"%s\" for unnest", alias);
 		}
@@ -354,16 +358,58 @@ BindResult UnnestBinder::Bind(FunctionExpression &function, idx_t depth, bool ro
 		}
 		unnest_expr = make_uniq<BoundExpandedExpression>(std::move(struct_expressions));
 	}
+	if (set_returning && unnest_expr->GetReturnType().id() == LogicalTypeId::STRUCT &&
+	    StructType::GetChildCount(unnest_expr->GetReturnType()) == 1) {
+		auto alias = unnest_expr->GetAlias();
+		vector<string> key_path {StructType::GetChildName(unnest_expr->GetReturnType(), 0).GetIdentifierName()};
+		unnest_expr = CreateBoundStructExtract(context, std::move(unnest_expr), key_path, false);
+		unnest_expr->SetAlias(std::move(alias));
+	}
 	return BindResult(std::move(unnest_expr));
+}
+
+static bool IsSetReturningCall(const FunctionExpression &function) {
+	for (auto &argument : function.GetArguments()) {
+		auto &expression = argument.GetExpression();
+		if (argument.GetName() == "set_returning" && expression.GetExpressionClass() == ExpressionClass::CONSTANT &&
+		    expression.Cast<ConstantExpression>().GetLiteral() == Literal::Boolean(true)) {
+			return true;
+		}
+	}
+	return false;
 }
 
 BindResult SelectBinder::BindUnnest(FunctionExpression &function, idx_t depth, bool root_expression) {
 	if (inside_window || inside_aggregate || inside_try) {
 		return BindResult(BinderException(function, UnsupportedUnnestMessage()));
 	}
-	UnnestBinder unnest_binder(*this, binder, context, node.unnests.SelectList(), unnest_level,
-	                           StructUnnestHandling::ALLOW_ROOT, "UNNEST of struct cannot be used in GROUP BY clause");
-	return unnest_binder.Bind(function, depth, root_expression);
+	const bool reuse_call = depth == 0 && unnest_level == 0 && IsSetReturningCall(function);
+	auto &unnests = node.unnests.SelectList();
+	unique_ptr<ParsedExpression> call;
+	if (reuse_call) {
+		auto entry = unnests.find(unnest_level);
+		if (entry != unnests.end()) {
+			for (auto &bound_call : entry->second.calls) {
+				if (bound_call.first->Equals(function)) {
+					auto result = bound_call.second->Copy();
+					if (!function.GetAlias().empty()) {
+						result->SetAlias(function.GetAlias());
+					}
+					return BindResult(std::move(result));
+				}
+			}
+		}
+		call = function.Copy();
+	}
+	UnnestBinder unnest_binder(*this, binder, context, unnests, unnest_level, StructUnnestHandling::ALLOW_ROOT,
+	                           "UNNEST of struct cannot be used in GROUP BY clause");
+	auto result = unnest_binder.Bind(function, depth, root_expression);
+	if (call && !result.HasError() && result.expression->GetExpressionClass() != ExpressionClass::BOUND_EXPANDED) {
+		auto entry = unnests.find(unnest_level);
+		D_ASSERT(entry != unnests.end());
+		entry->second.calls.emplace_back(std::move(call), result.expression->Copy());
+	}
+	return result;
 }
 
 BindResult GroupBinder::BindUnnest(FunctionExpression &function, idx_t depth, bool root_expression) {
