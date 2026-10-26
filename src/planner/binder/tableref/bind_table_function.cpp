@@ -456,7 +456,7 @@ BoundStatement Binder::Bind(TableFunctionRef &ref) {
 		}
 	}
 	auto &func_catalog = *func_catalog_ptr;
-	if (func_catalog.type == CatalogType::MACRO_ENTRY) {
+	if (func_catalog.type == CatalogType::MACRO_ENTRY || func_catalog.type == CatalogType::TABLE_MACRO_ENTRY) {
 		auto &macro_func = func_catalog.Cast<MacroCatalogEntry>();
 		if (macro_func.is_procedure && !allow_procedure_call) {
 			throw BinderException("%s() is a procedure\nHINT: To call a procedure, use CALL.",
@@ -479,41 +479,9 @@ BoundStatement Binder::Bind(TableFunctionRef &ref) {
 		auto bind_index = query.plan->GetRootIndex();
 		string alias =
 		    (ref.alias.empty() ? "unnamed_query" + to_string(bind_index.index) : ref.alias.GetIdentifierName());
-		bind_context.AddSubquery(bind_index, Identifier(alias), ref, query);
-		MoveCorrelatedExpressions(*binder_child);
-		return query;
-	}
-
-	if (func_catalog.type == CatalogType::TABLE_MACRO_ENTRY) {
-		auto &macro_func = func_catalog.Cast<TableMacroCatalogEntry>();
-		if (macro_func.is_procedure && !allow_procedure_call) {
-			throw BinderException("%s() is a procedure\nHINT: To call a procedure, use CALL.",
-			                      fexpr.FunctionName().GetIdentifierName());
-		}
-		auto query_node = BindTableMacro(fexpr, macro_func, 0);
-		D_ASSERT(query_node);
-
-		auto binder = Binder::CreateBinder(context, this);
-		binder->SetCanContainNulls(true);
-
-		binder->alias = ref.alias.empty() ? "unnamed_query" : ref.alias;
-		BoundStatement query;
-		try {
-			query = binder->BindNode(*query_node);
-		} catch (std::exception &ex) {
-			ErrorData error(ex);
-			error.AddQueryLocation(ref);
-			error.Throw();
-		}
-
-		auto bind_index = query.plan->GetRootIndex();
-		// string alias;
-		string alias =
-		    (ref.alias.empty() ? "unnamed_query" + to_string(bind_index.index) : ref.alias.GetIdentifierName());
-
 		// remember ref here is TableFunctionRef and NOT base class
 		bind_context.AddSubquery(bind_index, Identifier(alias), ref, query);
-		MoveCorrelatedExpressions(*binder);
+		MoveCorrelatedExpressions(*binder_child);
 		return query;
 	}
 	D_ASSERT(func_catalog.type == CatalogType::TABLE_FUNCTION_ENTRY);
