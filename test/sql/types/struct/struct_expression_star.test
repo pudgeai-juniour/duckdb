@@ -103,13 +103,13 @@ SELECT unnest(NULL::STRUCT(a INTEGER, b INTEGER));
 ----
 NULL	NULL
 
-query II
+query I
 SELECT * FROM struct_pack(a := 1, b := 'x');
 ----
-1	x
+{'a': 1, 'b': x}
 
 query I
-SELECT s.b FROM struct_pack(a := 1, b := 'x') AS s;
+SELECT (s).b FROM (SELECT struct_pack(a := 1, b := 'x') AS s);
 ----
 x
 

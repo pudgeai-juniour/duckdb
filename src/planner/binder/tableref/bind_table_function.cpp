@@ -1,5 +1,6 @@
 #include "duckdb/catalog/catalog.hpp"
 #include "duckdb/catalog/catalog_entry/macro_catalog_entry.hpp"
+#include "duckdb/catalog/catalog_entry/scalar_function_catalog_entry.hpp"
 #include "duckdb/catalog/catalog_entry/table_macro_catalog_entry.hpp"
 #include "duckdb/function/builtin_function_lookup.hpp"
 #include "duckdb/parser/expression/columnref_expression.hpp"
@@ -25,6 +26,8 @@
 #include "duckdb/planner/expression/bound_window_expression.hpp"
 #include "duckdb/planner/operator/logical_window.hpp"
 #include "duckdb/planner/expression/bound_constant_expression.hpp"
+
+#include <absl/algorithm/container.h>
 
 namespace duckdb {
 
@@ -484,6 +487,15 @@ BoundStatement Binder::Bind(TableFunctionRef &ref) {
 			auto select = make_uniq<SelectNode>();
 			select->select_list.push_back(ref.function->Copy());
 			select->from_table = make_uniq<EmptyTableRef>();
+			if (func_catalog_ptr->type == CatalogType::SCALAR_FUNCTION_ENTRY &&
+			    absl::c_any_of(func_catalog_ptr->Cast<ScalarFunctionCatalogEntry>().functions.functions,
+			                   [](const shared_ptr<const ScalarFunction> &function) {
+				                   return function->GetSignature().IsRecordResult();
+			                   })) {
+				auto fields = make_uniq<StarExpression>();
+				fields->ExpressionMutable() = std::move(select->select_list[0]);
+				select->select_list[0] = std::move(fields);
+			}
 			auto subquery = make_uniq<SelectStatement>();
 			subquery->node = std::move(select);
 			SubqueryRef subquery_ref(std::move(subquery), ref.alias.empty() ? fexpr.FunctionName() : ref.alias);

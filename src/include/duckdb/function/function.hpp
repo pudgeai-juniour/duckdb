@@ -415,10 +415,18 @@ public:
 
 	hash_t Hash() const;
 
+	bool IsRecordResult() const {
+		return record_result;
+	}
+	void SetRecordResult() {
+		record_result = true;
+	}
+
 private:
 	vector<FunctionParameter> parameters;
 	shared_ptr<TypedKwargs> typed_kwargs; // optional "schema" for the accepted **kwargs
 	LogicalType return_type;
+	bool record_result = false;
 };
 
 //! Function is the base class used for any type of function (scalar, aggregate or simple function)
