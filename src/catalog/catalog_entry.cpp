@@ -15,10 +15,16 @@ CatalogEntry::CatalogEntry(CatalogType type, Identifier name_p, idx_t oid)
       previous_version(nullptr), parent(nullptr) {
 }
 
+static idx_t AssignOid(Catalog &catalog, idx_t oid) {
+	auto &manager = catalog.GetDatabase().GetDatabaseManager();
+	if (oid) {
+		return manager.ClaimOid(oid);
+	}
+	return catalog.IsSystemCatalog() ? manager.NextSystemOid() : manager.NextOid();
+}
+
 CatalogEntry::CatalogEntry(CatalogType type, Catalog &catalog, Identifier name_p, idx_t oid)
-    : CatalogEntry(type, std::move(name_p),
-                   oid ? catalog.GetDatabase().GetDatabaseManager().ClaimOid(oid)
-                       : catalog.GetDatabase().GetDatabaseManager().NextOid()) {
+    : CatalogEntry(type, std::move(name_p), AssignOid(catalog, oid)) {
 }
 
 CatalogEntry::~CatalogEntry() {

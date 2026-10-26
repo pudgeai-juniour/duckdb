@@ -40,7 +40,12 @@ public:
 	explicit DatabaseManager(DatabaseInstance &db);
 	~DatabaseManager();
 
-	static constexpr idx_t FIRST_OID = 65536;
+	//! Oids come in fixed ranges, so a user object's oid does not depend on how many builtins the system catalog
+	//! registers, and a catalog replayed by oid survives a builtin added or removed: [0, 2^17) belongs to the host
+	//! (PostgreSQL numbers its own objects below 16384), the system catalog takes [2^17, 2^18), and user objects
+	//! start at 2^18.
+	static constexpr idx_t FIRST_SYSTEM_OID = 131072;
+	static constexpr idx_t FIRST_OID = 262144;
 
 public:
 	static DatabaseManager &Get(DatabaseInstance &db);
@@ -130,6 +135,7 @@ public:
 	idx_t NextOid(idx_t count = 1) {
 		return next_oid.fetch_add(count, std::memory_order_relaxed);
 	}
+	idx_t NextSystemOid(idx_t count = 1);
 	idx_t ClaimOid(idx_t oid) {
 		for (auto current = next_oid.load(); current <= oid;) {
 			if (next_oid.compare_exchange_weak(current, oid + 1)) {
@@ -173,6 +179,7 @@ private:
 	//! The next object id handed out by the NextOid method
 	atomic<idx_t> next_oid;
 	atomic<idx_t> next_catalog_change {0};
+	atomic<idx_t> next_system_oid;
 	mutex committed_prepared_lock;
 	map<hugeint_t, vector<pair<idx_t, idx_t>>> committed_prepared;
 	//! The current query number
