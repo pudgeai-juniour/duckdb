@@ -83,8 +83,7 @@ unique_ptr<Expression> ConcatFlatteningRule::Apply(LogicalOperator &op, vector<r
 		CollectConcatOperands(child, type, operands);
 	}
 	FunctionBinder binder(rewriter.context);
-	auto result =
-	    binder.BindScalarFunction(Identifier::DefaultSchema(), ConcatOperatorFun::Name, std::move(operands), true);
+	auto result = binder.BindScalarFunction(concat.Function().GetDefinition(), std::move(operands), true);
 	if (result->GetReturnType() != type) {
 		return BoundCastExpression::AddCastToType(rewriter.context, std::move(result), type);
 	}

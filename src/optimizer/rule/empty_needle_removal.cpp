@@ -46,8 +46,7 @@ static unique_ptr<Expression> TryRemoveEmptyStringConcat(ClientContext &context,
 		return Expression::PreserveReturnType(root.GetReturnType(), std::move(remaining[0]));
 	}
 	FunctionBinder binder(context);
-	auto result = binder.BindScalarFunction(Identifier::DefaultSchema(), root.Function().GetName(),
-	                                        std::move(remaining), root.IsOperator());
+	auto result = binder.BindScalarFunction(root.Function().GetDefinition(), std::move(remaining), root.IsOperator());
 	if (result->GetReturnType() != root.GetReturnType()) {
 		return BoundCastExpression::AddCastToType(context, std::move(result), root.GetReturnType());
 	}
