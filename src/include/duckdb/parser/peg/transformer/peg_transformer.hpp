@@ -655,7 +655,7 @@ public:
 	const CompiledGrammar &grammar;
 
 private:
-#ifdef DEBUG
+#ifdef D_ASSERT_IS_ENABLED
 	void VerifyResultHeight(const ParseResult &parse_result, TransformResultValue &result, idx_t height);
 #endif
 

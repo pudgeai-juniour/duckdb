@@ -392,10 +392,12 @@ unique_ptr<SQLStatement> Parser::ParseTopLevelStatement(TokenIterator &token_ite
 	if (height > options.max_expression_depth) {
 		VerifyStatementDepth(*statement, depth_check);
 	} else {
-#ifdef DEBUG
-		ExpressionDepthCheck measure {NumericLimits<idx_t>::Maximum(), {}};
-		VerifyStatementDepth(*statement, measure);
-		D_ASSERT(measure.deepest <= height);
+#ifdef D_ASSERT_IS_ENABLED
+		if (DUCKDB_DEBUG_VERIFY_ENABLED()) {
+			ExpressionDepthCheck measure {NumericLimits<idx_t>::Maximum(), {}};
+			VerifyStatementDepth(*statement, measure);
+			D_ASSERT(measure.deepest <= height);
+		}
 #endif
 	}
 	return statement;

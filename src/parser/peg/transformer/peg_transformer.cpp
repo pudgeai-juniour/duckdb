@@ -485,8 +485,9 @@ bool PEGTransformer::MayExceedDepth() const {
 	return !running_frame || running_frame->height > options.max_expression_depth;
 }
 
-#ifdef DEBUG
+#ifdef D_ASSERT_IS_ENABLED
 void PEGTransformer::VerifyResultHeight(const ParseResult &parse_result, TransformResultValue &result, idx_t height) {
+	DUCKDB_DEBUG_VERIFY_GUARD();
 	ExpressionDepthCheck measure {NumericLimits<idx_t>::Maximum(), {}};
 	auto verify = [&](ParsedExpression *expr) {
 		if (expr) {
