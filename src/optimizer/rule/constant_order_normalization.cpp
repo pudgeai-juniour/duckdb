@@ -1,5 +1,7 @@
 #include "duckdb/optimizer/rule/constant_order_normalization.hpp"
 
+#include "duckdb/catalog/catalog.hpp"
+#include "duckdb/catalog/catalog_entry/scalar_function_catalog_entry.hpp"
 #include "duckdb/optimizer/expression_rewriter.hpp"
 #include "duckdb/planner/expression/bound_function_expression.hpp"
 #include "duckdb/function/function_binder.hpp"
@@ -136,6 +138,9 @@ unique_ptr<Expression> ConstantOrderNormalizationRule::Apply(LogicalOperator &op
 	}
 
 	// Reconstruct the expression.
+	auto &catalog = Catalog::GetSystemCatalog(rewriter.context);
+	auto &function = catalog.GetEntry<ScalarFunctionCatalogEntry>(
+	    rewriter.context, QualifiedName(catalog.GetName(), Identifier::DefaultSchema(), root.Function().GetName()));
 	FunctionBinder binder(rewriter.context);
 	unique_ptr<Expression> new_root = ordered_bindings[0].get().Copy();
 	vector<unique_ptr<Expression>> children;
@@ -143,8 +148,11 @@ unique_ptr<Expression> ConstantOrderNormalizationRule::Apply(LogicalOperator &op
 	for (idx_t i = 1; i < ordered_bindings.size(); ++i) {
 		// Right child.
 		children.push_back(ordered_bindings[i].get().Copy());
-		new_root = binder.BindScalarFunction(Identifier::DefaultSchema(), root.Function().GetName(),
-		                                     std::move(children), root.IsOperator());
+		ErrorData error;
+		new_root = binder.BindScalarFunction(function, std::move(children), error, root.IsOperator());
+		if (!new_root) {
+			error.Throw();
+		}
 		children.clear();
 		// Left child.
 		children.push_back(std::move(new_root));
