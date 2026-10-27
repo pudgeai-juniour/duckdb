@@ -817,7 +817,7 @@ static bool SubtreeHasSubqueries(LogicalOperator &op) {
 bool RecursiveDependentJoinPlanner::HasUnplannedSubqueries(LogicalOperator &op) {
 	auto entry = unplanned_subqueries.find(op);
 	if (entry != unplanned_subqueries.end()) {
-		D_ASSERT(entry->second || !SubtreeHasSubqueries(op));
+		D_ASSERT_V(entry->second || !SubtreeHasSubqueries(op));
 		return entry->second;
 	}
 	bool result = OwnExpressionsHaveSubqueries(op);
