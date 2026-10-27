@@ -1196,6 +1196,7 @@ String:
     - NotSimilarToOp
     - QualifiedOperator
     - QualifiedOperatorContents
+    - QuestionMarkOperator
     - ColIdDot
     - AnyOperatorLiteral
     - BitOperator
@@ -1207,6 +1208,7 @@ String:
     - PlusPrefixOperator
     - TildePrefixOperator
     - DoubleNotPrefixOperator
+    - QuestionMarkPrefixOperator
     - Framing
     - RowsFraming
     - RangeFraming

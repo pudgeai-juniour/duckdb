@@ -1717,6 +1717,15 @@ string PEGTransformerFactory::TransformQualifiedOperator(PEGTransformer &transfo
 	return qualified_operator_contents;
 }
 
+string PEGTransformerFactory::TransformQuestionMarkOperator(PEGTransformer &transformer,
+                                                            const string &any_operator_literal) {
+	return "?" + any_operator_literal;
+}
+
+string PEGTransformerFactory::TransformQuestionMarkPrefixOperator(PEGTransformer &transformer) {
+	return "?|";
+}
+
 string PEGTransformerFactory::TransformQualifiedOperatorContents(PEGTransformer &transformer,
                                                                  const optional<vector<string>> &col_id_dot,
                                                                  const string &any_operator_literal) {

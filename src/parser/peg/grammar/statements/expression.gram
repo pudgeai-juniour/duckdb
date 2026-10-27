@@ -256,7 +256,8 @@ OtherOperator <-
     AnyAllParsedOperator / NamedOtherOperator
 AnyAllParsedOperator <- AnyAllOperator
 NamedOtherOperator <-
-    QualifiedOperator / OperatorLiteral
+    QualifiedOperator / OperatorLiteral / QuestionMarkOperator
+QuestionMarkOperator <- '?' AnyOperatorLiteral
 OperatorLiteral <- Identifier
 AnyOperatorLiteral <- Identifier
 AnyAllOperator <- AnyOperatorLiteral AnyOrAll
@@ -293,7 +294,8 @@ AtTimeZoneExpressionTail <- AtTimeZoneOperator PrefixExpression
 AtTimeZoneOperator <- 'AT' 'TIME' 'ZONE'
 # LEVEL 15
 PrefixExpression <- PrefixOperator* BaseExpression
-PrefixOperator <- QualifiedOperator / MinusPrefixOperator / PlusPrefixOperator / DoubleNotPrefixOperator
+PrefixOperator <- QualifiedOperator / MinusPrefixOperator / PlusPrefixOperator / DoubleNotPrefixOperator / QuestionMarkPrefixOperator
+QuestionMarkPrefixOperator <- '?' '|'
 MinusPrefixOperator <- '-'
 PlusPrefixOperator <- '+'
 TildePrefixOperator <- '~'
