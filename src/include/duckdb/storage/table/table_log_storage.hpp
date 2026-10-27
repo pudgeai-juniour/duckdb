@@ -12,7 +12,10 @@ class DataChunk;
 struct WALFrozenRowPositionMap {
 	uint32_t source = 0;
 	uint32_t target = 0;
-	std::span<const data_t> docs;
+	uint32_t base = 0;
+	uint32_t rank_begin = 0;
+	uint32_t rank_end = 0;
+	std::span<const data_t> mask;
 };
 
 class TableLogStorage {

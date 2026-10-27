@@ -2231,7 +2231,15 @@ void WriteAheadLogDeserializer::ReplayRowPositionMaps() {
 		list.ReadObject([&](Deserializer &map) {
 			const auto source = map.ReadProperty<uint32_t>(100, "source");
 			const auto target = map.ReadProperty<uint32_t>(101, "target");
-			maps.push_back({.source = source, .target = target, .docs = ReadBitmap(102, 103)});
+			const auto base = map.ReadProperty<uint32_t>(102, "base");
+			const auto rank_begin = map.ReadProperty<uint32_t>(103, "rank_begin");
+			const auto rank_end = map.ReadProperty<uint32_t>(104, "rank_end");
+			maps.push_back({.source = source,
+			                .target = target,
+			                .base = base,
+			                .rank_begin = rank_begin,
+			                .rank_end = rank_end,
+			                .mask = ReadBitmap(105, 106)});
 		});
 	});
 	if (DeserializeOnly()) {

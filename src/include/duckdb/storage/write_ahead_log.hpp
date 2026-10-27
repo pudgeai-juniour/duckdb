@@ -51,7 +51,10 @@ enum class WALInitState { NO_WAL, UNINITIALIZED, UNINITIALIZED_REQUIRES_TRUNCATE
 struct WALRowPositionMap {
 	uint32_t source = 0;
 	uint32_t target = 0;
-	const ::roaring::api::roaring_bitmap_t *docs = nullptr;
+	uint32_t base = 0;
+	uint32_t rank_begin = 0;
+	uint32_t rank_end = 0;
+	const ::roaring::api::roaring_bitmap_t *mask = nullptr;
 };
 
 class WALEntryBuffer {
