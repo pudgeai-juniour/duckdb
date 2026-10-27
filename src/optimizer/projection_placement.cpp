@@ -333,9 +333,11 @@ static bool FindLiftPlacement(LogicalProjection &projection, idx_t expression_in
 		}
 
 #ifdef D_ASSERT_IS_ENABLED
-		const auto resolved_types = op.types;
-		op.ResolveOperatorTypes();
-		D_ASSERT(resolved_types == op.types);
+		if (DUCKDB_DEBUG_VERIFY_ENABLED()) {
+			const auto resolved_types = op.types;
+			op.ResolveOperatorTypes();
+			D_ASSERT(resolved_types == op.types);
+		}
 #endif
 		LiftPathStep step {op, ancestor.child_index, op.GetColumnBindings(), current_bindings};
 		path.push_back(std::move(step));

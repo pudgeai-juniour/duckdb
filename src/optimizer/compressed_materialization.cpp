@@ -462,12 +462,14 @@ void CompressedMaterialization::Compress(unique_ptr<LogicalOperator> &op) {
 		types_resolved = true;
 	} else {
 #ifdef D_ASSERT_IS_ENABLED
-		vector<vector<LogicalType>> resolved;
-		CollectOperatorTypes(*root, resolved);
-		root->ResolveOperatorTypes();
-		vector<vector<LogicalType>> reresolved;
-		CollectOperatorTypes(*root, reresolved);
-		D_ASSERT(resolved == reresolved);
+		if (DUCKDB_DEBUG_VERIFY_ENABLED()) {
+			vector<vector<LogicalType>> resolved;
+			CollectOperatorTypes(*root, resolved);
+			root->ResolveOperatorTypes();
+			vector<vector<LogicalType>> reresolved;
+			CollectOperatorTypes(*root, reresolved);
+			D_ASSERT(resolved == reresolved);
+		}
 #endif
 	}
 
