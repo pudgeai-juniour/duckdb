@@ -323,7 +323,7 @@ TransformStack::FinishFrame(TransformStackFrame &frame, arena_ptr<TransformResul
 	if (result_height >= transformer.max_height) {
 		ParserException::ThrowMaxExpressionDepth(transformer.options.max_expression_depth);
 	}
-#ifdef DEBUG
+#ifdef D_ASSERT_IS_ENABLED
 	transformer.VerifyResultHeight(frame.parse_result, *result, result_height);
 #endif
 	transformer.SetResultLocation(frame.parse_result, *result);
