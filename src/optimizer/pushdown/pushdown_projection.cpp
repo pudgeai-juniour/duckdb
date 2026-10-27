@@ -9,30 +9,6 @@
 
 namespace duckdb {
 
-static bool IsVolatile(LogicalProjection &proj, const Expression &expr) {
-	bool is_volatile = false;
-	ExpressionIterator::VisitExpression<BoundColumnRefExpression>(expr, [&](const BoundColumnRefExpression &colref) {
-		D_ASSERT(colref.Depth() == 0);
-		auto &proj_expr = proj.GetExpression(colref.Binding());
-		if (proj_expr.IsVolatile()) {
-			is_volatile = true;
-		}
-	});
-	return is_volatile;
-}
-
-static bool ReferencesComputedExpression(LogicalProjection &proj, const Expression &expr) {
-	bool references_computed_expression = false;
-	ExpressionIterator::VisitExpression<BoundColumnRefExpression>(expr, [&](const BoundColumnRefExpression &colref) {
-		D_ASSERT(colref.Depth() == 0);
-		auto &proj_expr = proj.GetExpression(colref.Binding());
-		if (proj_expr.GetExpressionClass() != ExpressionClass::BOUND_COLUMN_REF) {
-			references_computed_expression = true;
-		}
-	});
-	return references_computed_expression;
-}
-
 static unique_ptr<Expression> CreateColumnReference(const Expression &expr, ColumnBinding binding) {
 	unique_ptr<Expression> result = make_uniq<BoundColumnRefExpression>(expr.GetReturnType(), binding);
 	if (!expr.GetAlias().empty()) {
@@ -160,7 +136,7 @@ unique_ptr<LogicalOperator> FilterPushdown::PushdownProjection(unique_ptr<Logica
 	for (auto &filter : filters) {
 		auto &f = *filter;
 		D_ASSERT(f.bindings.size() <= 1);
-		bool is_volatile = IsVolatile(proj, *f.filter);
+		bool is_volatile = ReferencesVolatileExpression(proj, *f.filter);
 		bool preserve_computed_expression = projection_mode == ProjectionMode::PRESERVE_COMPUTED_EXPRESSIONS &&
 		                                    ReferencesComputedExpression(proj, *f.filter);
 		if (is_volatile || (f.filter->CanThrow() && !f.has_barrier)) {

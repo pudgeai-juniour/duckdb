@@ -11,6 +11,8 @@
 #include "duckdb/common/unordered_set.hpp"
 #include "duckdb/optimizer/filter_combiner.hpp"
 #include "duckdb/optimizer/rule.hpp"
+#include "duckdb/planner/expression/bound_columnref_expression.hpp"
+#include "duckdb/planner/expression_iterator.hpp"
 
 namespace duckdb {
 
@@ -135,6 +137,25 @@ private:
 	//! if there are filters in this FilterPushdown node, push them into the combiner. Returns
 	//! FilterResult::UNSATISFIABLE if the subtree should be stripped, or FilterResult::SUCCESS otherwise
 	FilterResult PushFilters();
+
+	template <class OP, class F>
+	static bool ReferencesExpression(OP &op, const Expression &filter, F &&predicate) {
+		return ExpressionIterator::AnyExpression<BoundColumnRefExpression>(
+		    filter, [&](const BoundColumnRefExpression &colref) {
+			    D_ASSERT(colref.Depth() == 0);
+			    return predicate(op.GetExpression(colref.Binding()));
+		    });
+	}
+	template <class OP>
+	static bool ReferencesVolatileExpression(OP &op, const Expression &filter) {
+		return ReferencesExpression(op, filter, [](const Expression &expr) { return expr.IsVolatile(); });
+	}
+	template <class OP>
+	static bool ReferencesComputedExpression(OP &op, const Expression &filter) {
+		return ReferencesExpression(op, filter, [](const Expression &expr) {
+			return expr.GetExpressionClass() != ExpressionClass::BOUND_COLUMN_REF;
+		});
+	}
 };
 
 } // namespace duckdb

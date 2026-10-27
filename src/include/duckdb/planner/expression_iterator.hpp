@@ -91,6 +91,18 @@ public:
 	static void VisitExpression(const Expression &expr, F &&callback) {
 		VisitExpressionClass(expr, T::TYPE, [&](const Expression &child) { callback(child.Cast<T>()); });
 	}
+	template <class F>
+	static bool AnyExpressionClass(const Expression &expr, ExpressionClass expr_class, F &&predicate) {
+		if (expr.GetExpressionClass() == expr_class) {
+			return predicate(expr);
+		}
+		return AnyChild(expr,
+		                [&](const Expression &child) { return AnyExpressionClass(child, expr_class, predicate); });
+	}
+	template <class T, class F>
+	static bool AnyExpression(const Expression &expr, F &&predicate) {
+		return AnyExpressionClass(expr, T::TYPE, [&](const Expression &child) { return predicate(child.Cast<T>()); });
+	}
 
 private:
 	template <class F>
