@@ -757,30 +757,31 @@ void WALEntryBuffer::WriteAdoptSegments(vector<string> segments) {
 }
 
 void WALEntryBuffer::WriteDeleteRowPositions(std::span<const uint32_t> segments,
-                                             std::span<const ::roaring::api::roaring_bitmap_t *const> docs) {
-	D_ASSERT(!segments.empty() && segments.size() == docs.size());
+                                             absl::FunctionRef<const ::roaring::api::roaring_bitmap_t *(idx_t)> docs) {
+	D_ASSERT(!segments.empty());
 	WriteAheadLogSerializer serializer(database, stream, WALType::DELETE_ROW_POSITIONS);
 	serializer.WriteList(101, "groups", segments.size(), [&](Serializer::List &list, idx_t i) {
 		list.WriteObject([&](Serializer &group) {
 			group.WriteProperty(100, "segment", segments[i]);
-			serializer.WriteBitmap(101, 102, docs[i]);
+			serializer.WriteBitmap(101, 102, docs(i));
 		});
 	});
 	serializer.End();
 	entry_count++;
 }
 
-void WALEntryBuffer::WriteRowPositionMaps(std::span<const WALRowPositionMap> maps) {
-	D_ASSERT(!maps.empty());
+void WALEntryBuffer::WriteRowPositionMaps(idx_t count, absl::FunctionRef<WALRowPositionMap(idx_t)> maps) {
+	D_ASSERT(count != 0);
 	WriteAheadLogSerializer serializer(database, stream, WALType::ROW_POSITION_MAPS);
-	serializer.WriteList(101, "maps", maps.size(), [&](Serializer::List &list, idx_t i) {
+	serializer.WriteList(101, "maps", count, [&](Serializer::List &list, idx_t i) {
+		const auto written = maps(i);
 		list.WriteObject([&](Serializer &map) {
-			map.WriteProperty(100, "source", maps[i].source);
-			map.WriteProperty(101, "target", maps[i].target);
-			map.WriteProperty(102, "base", maps[i].base);
-			map.WriteProperty(103, "rank_begin", maps[i].rank_begin);
-			map.WriteProperty(104, "rank_end", maps[i].rank_end);
-			serializer.WriteBitmap(105, 106, maps[i].mask);
+			map.WriteProperty(100, "source", written.source);
+			map.WriteProperty(101, "target", written.target);
+			map.WriteProperty(102, "base", written.base);
+			map.WriteProperty(103, "rank_begin", written.rank_begin);
+			map.WriteProperty(104, "rank_end", written.rank_end);
+			serializer.WriteBitmap(105, 106, written.mask);
 		});
 	});
 	serializer.End();

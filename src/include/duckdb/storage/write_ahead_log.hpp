@@ -65,8 +65,8 @@ public:
 	void WriteTruncateTable();
 	void WriteAdoptSegments(vector<string> segments);
 	void WriteDeleteRowPositions(std::span<const uint32_t> segments,
-	                             std::span<const ::roaring::api::roaring_bitmap_t *const> docs);
-	void WriteRowPositionMaps(std::span<const WALRowPositionMap> maps);
+	                             absl::FunctionRef<const ::roaring::api::roaring_bitmap_t *(idx_t)> docs);
+	void WriteRowPositionMaps(idx_t count, absl::FunctionRef<WALRowPositionMap(idx_t)> maps);
 
 private:
 	friend class WriteAheadLog;
