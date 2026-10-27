@@ -78,9 +78,11 @@ void ProjectionPullup::InsertProjectionBelowOp(unique_ptr<LogicalOperator> &op, 
                                                bool reads_by_position) {
 	if (child->type != LogicalOperatorType::LOGICAL_PROJECTION) {
 #ifdef D_ASSERT_IS_ENABLED
-		const auto resolved_types = child->types;
-		child->ResolveOperatorTypes();
-		D_ASSERT(resolved_types == child->types);
+		if (DUCKDB_DEBUG_VERIFY_ENABLED()) {
+			const auto resolved_types = child->types;
+			child->ResolveOperatorTypes();
+			D_ASSERT(resolved_types == child->types);
+		}
 #endif
 		auto proj_index = optimizer.binder.GenerateTableIndex();
 		vector<ColumnBinding> child_bindings;

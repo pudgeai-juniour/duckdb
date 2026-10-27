@@ -565,6 +565,7 @@ bool AncestorBindingReplacer::Replace(LogicalOperator &ancestor) {
 void AncestorBindingReplacer::Verify([[maybe_unused]] LogicalOperator &root,
                                      [[maybe_unused]] LogicalOperator &replaced_subtree) const {
 #ifdef D_ASSERT_IS_ENABLED
+	DUCKDB_DEBUG_VERIFY_GUARD();
 	ReplacedBindingVerifier verifier(replacer.replacement_bindings, replaced_subtree);
 	verifier.VisitOperator(root);
 #endif
