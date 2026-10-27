@@ -38,6 +38,47 @@ FROM range(150) t(i)
 ----
 14950	100
 
+query III
+SELECT list_position(range(100000), i), list_contains(range(100000), i), list_position(range(100000) || [5, NULL, 7], i)
+FROM (VALUES (5), (99999), (100000), (NULL)) t(i)
+----
+6	true	6
+100000	true	100000
+NULL	false	NULL
+NULL	NULL	100002
+
+query IIII
+SELECT count(list_position(range(5000) || range(5000), i)), sum(list_position(range(5000) || range(5000), i)),
+	count(*) FILTER (WHERE list_contains(range(5000), i)), count(*) FILTER (WHERE list_position(range(5000) || [NULL], i) = 5001)
+FROM (SELECT CASE WHEN i % 1000 = 999 THEN NULL ELSE i END AS i FROM range(0, 100000, 7) t(i))
+----
+715	1787500	715	14
+
+query II
+SELECT count(*) FILTER (WHERE list_position(range(100) || [NULL, 7, NULL], i) = 101), sum(list_position(range(100) || [NULL, 7, NULL], i))
+FROM (SELECT CASE WHEN i % 5 = 0 THEN NULL ELSE i END AS i FROM range(100) t(i))
+----
+20	6100
+
+query II
+SELECT count(*) FILTER (WHERE list_position(list_transform(range(100), lambda x: to_days((x + 1)::INTEGER)), d) = 30),
+	sum(list_position(list_transform(range(100), lambda x: to_days((x + 1)::INTEGER)), d))
+FROM (SELECT CASE WHEN i % 10 = 0 THEN INTERVAL 1 MONTH ELSE to_days(i::INTEGER) END AS d FROM range(150) t(i))
+----
+15	4950
+
+query II
+SELECT count(map_extract_value(map(range(3000), range(3000, 6000)), i)), sum(map_extract_value(map(range(3000), range(3000, 6000)), i))
+FROM range(0, 20000, 3) t(i)
+----
+1000	4498500
+
+query II
+SELECT count(*) FILTER (WHERE map_contains(map(range(3000), range(3000)), i)), count(map_extract(map(range(3000), range(3000)), i)[1])
+FROM range(0, 20000, 3) t(i)
+----
+1000	1000
+
 query I
 SELECT list_contains(list_value(-0.0::DOUBLE, 'nan'::DOUBLE, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18,
 	19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48,
