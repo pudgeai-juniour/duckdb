@@ -173,22 +173,25 @@ void CTEJoinFilterPusher::Optimize(LogicalOperator &op) {
 		join->children.push_back(std::move(source_ref));
 		cte.children[0] = std::move(join);
 #ifdef D_ASSERT_IS_ENABLED
-		CTEJoinFilterPusher fresh(optimizer);
-		fresh.FindCandidates(op);
-		D_ASSERT(fresh.cte_info_map.size() == cte_info_map.size());
-		for (auto &fresh_entry : fresh.cte_info_map) {
-			auto current = cte_info_map.find(fresh_entry.first);
-			D_ASSERT(current != cte_info_map.end());
-			auto &fresh_info = *fresh_entry.second;
-			auto &current_info = *current->second;
-			D_ASSERT(&fresh_info.materialized_cte == &current_info.materialized_cte);
-			D_ASSERT(fresh_info.position == current_info.position && fresh_info.body_begin == current_info.body_begin &&
-			         fresh_info.body_end == current_info.body_end);
-			reference_set_t<LogicalCTERef> current_references(current_info.references.begin(),
-			                                                  current_info.references.end());
-			D_ASSERT(current_references.size() == fresh_info.references.size());
-			for (auto &ref : fresh_info.references) {
-				D_ASSERT(current_references.find(ref) != current_references.end());
+		if (DUCKDB_DEBUG_VERIFY_ENABLED()) {
+			CTEJoinFilterPusher fresh(optimizer);
+			fresh.FindCandidates(op);
+			D_ASSERT(fresh.cte_info_map.size() == cte_info_map.size());
+			for (auto &fresh_entry : fresh.cte_info_map) {
+				auto current = cte_info_map.find(fresh_entry.first);
+				D_ASSERT(current != cte_info_map.end());
+				auto &fresh_info = *fresh_entry.second;
+				auto &current_info = *current->second;
+				D_ASSERT(&fresh_info.materialized_cte == &current_info.materialized_cte);
+				D_ASSERT(fresh_info.position == current_info.position &&
+				         fresh_info.body_begin == current_info.body_begin &&
+				         fresh_info.body_end == current_info.body_end);
+				reference_set_t<LogicalCTERef> current_references(current_info.references.begin(),
+				                                                  current_info.references.end());
+				D_ASSERT(current_references.size() == fresh_info.references.size());
+				for (auto &ref : fresh_info.references) {
+					D_ASSERT(current_references.find(ref) != current_references.end());
+				}
 			}
 		}
 #endif

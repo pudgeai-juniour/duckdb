@@ -234,11 +234,11 @@ CTEInlining::SubtreeInfo CTEInlining::TryInliningCTE(unique_ptr<LogicalOperator>
 			ref_count++;
 		}
 	}
-	D_ASSERT(ref_count == CountCTEReferences(*op, cte.table_index));
-	D_ASSERT(definition.has_side_effects == cte.children[0]->HasSideEffects());
-	D_ASSERT(definition.contains_delim_get == ContainsDelimGet(*cte.children[0]));
-	D_ASSERT(definition.base_table_references == CountBaseTableReferences(*cte.children[0]));
-	D_ASSERT(!knows_volatility || definition.prevents_inlining == PreventsInlining(*cte.children[0]));
+	D_ASSERT_V(ref_count == CountCTEReferences(*op, cte.table_index));
+	D_ASSERT_V(definition.has_side_effects == cte.children[0]->HasSideEffects());
+	D_ASSERT_V(definition.contains_delim_get == ContainsDelimGet(*cte.children[0]));
+	D_ASSERT_V(definition.base_table_references == CountBaseTableReferences(*cte.children[0]));
+	D_ASSERT_V(!knows_volatility || definition.prevents_inlining == PreventsInlining(*cte.children[0]));
 
 	auto kept = body;
 	kept.Add(definition);

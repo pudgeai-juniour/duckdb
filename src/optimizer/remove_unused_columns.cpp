@@ -920,9 +920,11 @@ void RemoveUnusedColumns::PruneOperator(unique_ptr<LogicalOperator> &op_ref) {
 		}
 		cte_map_entry.expected_readers.insert(readers->second.begin(), readers->second.end());
 #ifdef D_ASSERT_IS_ENABLED
-		unordered_set<TableIndex> expected_readers;
-		GatherCTEScans(cte.table_index, *cte.children[1], expected_readers);
-		D_ASSERT(expected_readers == readers->second);
+		if (DUCKDB_DEBUG_VERIFY_ENABLED()) {
+			unordered_set<TableIndex> expected_readers;
+			GatherCTEScans(cte.table_index, *cte.children[1], expected_readers);
+			D_ASSERT(expected_readers == readers->second);
+		}
 #endif
 		cte_map_entry.everything_referenced = false;
 		auto output_bindings = cte.GetColumnBindings();

@@ -236,7 +236,7 @@ optional_ptr<CTEBinding> Binder::GetCTEBinding(const BindingAlias &name) {
 					// if it cannot be referenced (circular reference) we keep going up the stack
 					// to look for a CTE that can be referenced
 					if (binding.CanBeReferenced()) {
-						D_ASSERT(&binding == get_by_walk().get());
+						D_ASSERT_V(&binding == get_by_walk().get());
 						return binding;
 					}
 					result = binding;
@@ -247,7 +247,7 @@ optional_ptr<CTEBinding> Binder::GetCTEBinding(const BindingAlias &name) {
 			auto entry = current.bind_context.GetCTEBinding(name);
 			if (entry) {
 				if (entry->CanBeReferenced()) {
-					D_ASSERT(entry == get_by_walk());
+					D_ASSERT_V(entry == get_by_walk());
 					return entry;
 				}
 				result = entry;
@@ -259,7 +259,7 @@ optional_ptr<CTEBinding> Binder::GetCTEBinding(const BindingAlias &name) {
 		}
 		current_binder = *last.parent;
 	}
-	D_ASSERT(result == get_by_walk());
+	D_ASSERT_V(result == get_by_walk());
 	return result;
 }
 

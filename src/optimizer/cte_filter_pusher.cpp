@@ -87,18 +87,20 @@ unique_ptr<LogicalOperator> CTEFilterPusher::Optimize(unique_ptr<LogicalOperator
 		PushFilterIntoCTE(info);
 		RefreshDefinition(info, referenced_ctes);
 #ifdef D_ASSERT_IS_ENABLED
-		CTEFilterPusher fresh(optimizer);
-		fresh.FindCandidates(*op);
-		for (auto &fresh_entry : fresh.cte_info_map) {
-			auto current = cte_info_map.find(fresh_entry.first);
-			D_ASSERT(current != cte_info_map.end());
-			auto &fresh_references = fresh_entry.second->references;
-			auto &current_references = current->second->references;
-			D_ASSERT(fresh_references.size() == current_references.size());
-			for (auto fresh_ref = fresh_references.begin(), current_ref = current_references.begin();
-			     fresh_ref != fresh_references.end(); fresh_ref++, current_ref++) {
-				D_ASSERT(fresh_ref->second.filter.get() == current_ref->second.filter.get());
-				D_ASSERT(&fresh_ref->second.ref.get() == &current_ref->second.ref.get());
+		if (DUCKDB_DEBUG_VERIFY_ENABLED()) {
+			CTEFilterPusher fresh(optimizer);
+			fresh.FindCandidates(*op);
+			for (auto &fresh_entry : fresh.cte_info_map) {
+				auto current = cte_info_map.find(fresh_entry.first);
+				D_ASSERT(current != cte_info_map.end());
+				auto &fresh_references = fresh_entry.second->references;
+				auto &current_references = current->second->references;
+				D_ASSERT(fresh_references.size() == current_references.size());
+				for (auto fresh_ref = fresh_references.begin(), current_ref = current_references.begin();
+				     fresh_ref != fresh_references.end(); fresh_ref++, current_ref++) {
+					D_ASSERT(fresh_ref->second.filter.get() == current_ref->second.filter.get());
+					D_ASSERT(&fresh_ref->second.ref.get() == &current_ref->second.ref.get());
+				}
 			}
 		}
 #endif

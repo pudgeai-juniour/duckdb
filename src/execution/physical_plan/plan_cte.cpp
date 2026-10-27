@@ -55,9 +55,9 @@ PhysicalOperator &PhysicalPlanGenerator::CreatePlan(LogicalMaterializedCTE &op) 
 		GetSubtreeShape(op, materialized_cte_shapes);
 		shape = materialized_cte_shapes.find(op.table_index);
 	}
-	D_ASSERT(shape->second.definition_has_side_effects == op.children[0]->HasSideEffects());
-	D_ASSERT(shape->second.contains_recursive_cte ==
-	         (ContainsRecursiveCTE(*op.children[0]) || ContainsRecursiveCTE(*op.children[1])));
+	D_ASSERT_V(shape->second.definition_has_side_effects == op.children[0]->HasSideEffects());
+	D_ASSERT_V(shape->second.contains_recursive_cte ==
+	           (ContainsRecursiveCTE(*op.children[0]) || ContainsRecursiveCTE(*op.children[1])));
 	auto cte_body_has_side_effects = shape->second.definition_has_side_effects;
 	auto use_exchange = planning_recursive_cte_depth == 0 && !shape->second.contains_recursive_cte;
 
