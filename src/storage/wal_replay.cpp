@@ -2216,7 +2216,7 @@ void WriteAheadLogDeserializer::ReplayDeleteRowPositions() {
 		return;
 	}
 	if (!state.current_table && state.current_log_table) {
-		state.current_log_table->ReplayDeleteRowPositions(segments, docs);
+		state.current_log_table->ReplayDeleteRowPositions(std::move(segments), std::move(docs));
 		return;
 	}
 	if (!state.current_table && state.table_storage) {
@@ -2246,7 +2246,7 @@ void WriteAheadLogDeserializer::ReplayRowPositionMaps() {
 		return;
 	}
 	if (!state.current_table && state.current_log_table) {
-		state.current_log_table->ReplayRowPositionMaps(maps);
+		state.current_log_table->ReplayRowPositionMaps(std::move(maps));
 		return;
 	}
 	if (!state.current_table && state.table_storage) {
