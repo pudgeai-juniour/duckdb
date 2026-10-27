@@ -136,7 +136,7 @@ SinkFinalizeType PhysicalCreateIndex::Finalize(Pipeline &pipeline, Event &event,
 
 	bound_index->Verify();
 
-	D_ASSERT(!bound_index->ToString(true).empty());
+	D_ASSERT_V(!bound_index->ToString(true).empty());
 
 	bound_index->VerifyAllocations();
 

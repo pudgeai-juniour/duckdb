@@ -243,9 +243,9 @@ void Planner::CreatePlan(SQLStatement &statement) {
 		RewriteTriggersToDependent(*this->binder, *this->plan);
 		RecursiveDependentJoinPlanner::Plan(*this->binder, this->plan);
 		this->plan = FlattenDependentJoins::DecorrelateIndependent(*this->binder, std::move(this->plan));
-		D_ASSERT(!ContainsDependentJoin(*this->plan));
-		D_ASSERT(VerifyPlannedExpressions(*this->plan));
-		D_ASSERT(VerifyCanonicalComparisonJoins(*this->plan));
+		D_ASSERT_V(!ContainsDependentJoin(*this->plan));
+		D_ASSERT_V(VerifyPlannedExpressions(*this->plan));
+		D_ASSERT_V(VerifyCanonicalComparisonJoins(*this->plan));
 	}
 	this->properties = binder->GetStatementProperties();
 	this->properties.parameter_count = parameter_count;

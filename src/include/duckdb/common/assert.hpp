@@ -28,6 +28,7 @@
 namespace duckdb {
 [[noreturn]] DUCKDB_API void DuckDBAssertInternal(const char *condition_name, const char *file, int linenr);
 }
+#define D_ASSERT_V(condition) D_ASSERT(condition)
 
 #else
 namespace duckdb {
@@ -57,12 +58,21 @@ namespace duckdb {
 inline std::atomic<bool> g_debug_verify_enabled = false; // NOLINT: intentionally mutable global
 }
 
+#define DUCKDB_DEBUG_VERIFY_ENABLED() ::duckdb::g_debug_verify_enabled.load(std::memory_order_relaxed)
+
 // Place at the top of any Verify() method body
 // (inside #ifdef D_ASSERT_IS_ENABLED) to respect the global toggle.
 #define DUCKDB_DEBUG_VERIFY_GUARD()                                                                                    \
 	do {                                                                                                               \
-		if (!::duckdb::g_debug_verify_enabled.load(std::memory_order_relaxed)) [[likely]] {                            \
+		if (!DUCKDB_DEBUG_VERIFY_ENABLED()) [[likely]] {                                                               \
 			return;                                                                                                    \
+		}                                                                                                              \
+	} while (false)
+
+#define D_ASSERT_V(condition)                                                                                          \
+	do {                                                                                                               \
+		if (DUCKDB_DEBUG_VERIFY_ENABLED() && !(condition)) [[unlikely]] {                                              \
+			duckdb::DuckDBAssertInternal(#condition, __FILE__, __LINE__);                                              \
 		}                                                                                                              \
 	} while (false)
 

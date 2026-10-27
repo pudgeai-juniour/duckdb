@@ -256,18 +256,20 @@ unique_ptr<ParsedExpression> TableBinding::ExpandGeneratedColumn(const Identifie
 }
 
 const vector<ColumnIndex> &TableBinding::GetBoundColumnIds() const {
-#ifdef DEBUG
-	unordered_set<idx_t> column_ids;
-	for (auto &col_id : bound_column_ids) {
-		idx_t id = col_id.IsRowIdColumn() ? DConstants::INVALID_INDEX : col_id.GetPrimaryIndex();
-		auto result = column_ids.insert(id);
-		// assert that all entries in the bound_column_ids are unique
-		D_ASSERT(result.second);
-		auto it = std::find_if(name_map.begin(), name_map.end(),
-		                       [&](const std::pair<const Identifier, idx_t> &it) { return it.second == id; });
-		// assert that every id appears in the name_map
-		D_ASSERT(it != name_map.end());
-		// the order that they appear in is not guaranteed to be sequential
+#ifdef D_ASSERT_IS_ENABLED
+	if (DUCKDB_DEBUG_VERIFY_ENABLED()) {
+		unordered_set<idx_t> column_ids;
+		for (auto &col_id : bound_column_ids) {
+			idx_t id = col_id.IsRowIdColumn() ? DConstants::INVALID_INDEX : col_id.GetPrimaryIndex();
+			auto result = column_ids.insert(id);
+			// assert that all entries in the bound_column_ids are unique
+			D_ASSERT(result.second);
+			auto it = std::find_if(name_map.begin(), name_map.end(),
+			                       [&](const std::pair<const Identifier, idx_t> &it) { return it.second == id; });
+			// assert that every id appears in the name_map
+			D_ASSERT(it != name_map.end());
+			// the order that they appear in is not guaranteed to be sequential
+		}
 	}
 #endif
 	return bound_column_ids;

@@ -543,14 +543,16 @@ ARTConflictType ART::Build(unsafe_vector<ARTKey> &keys, unsafe_vector<ARTKey> &r
 		return result;
 	}
 
-#ifdef DEBUG
-	set<row_t> row_ids_debug;
-	Iterator it(*this);
-	it.FindMinimum(root_ptr);
-	ARTKey empty_key = ARTKey();
-	RowIdSetOutput output(row_ids_debug, NumericLimits<idx_t>().Maximum());
-	it.Scan(empty_key, output, false);
-	D_ASSERT(row_count == row_ids_debug.size());
+#ifdef D_ASSERT_IS_ENABLED
+	if (DUCKDB_DEBUG_VERIFY_ENABLED()) {
+		set<row_t> row_ids_debug;
+		Iterator it(*this);
+		it.FindMinimum(root_ptr);
+		ARTKey empty_key = ARTKey();
+		RowIdSetOutput output(row_ids_debug, NumericLimits<idx_t>().Maximum());
+		it.Scan(empty_key, output, false);
+		D_ASSERT(row_count == row_ids_debug.size());
+	}
 #endif
 
 	return ARTConflictType::NO_CONFLICT;
@@ -1603,7 +1605,8 @@ void ART::VerifyAllocations(IndexLock &l) {
 }
 
 void ART::VerifyAllocationsInternal() {
-#ifdef DEBUG
+#ifdef D_ASSERT_IS_ENABLED
+	DUCKDB_DEBUG_VERIFY_GUARD();
 	unordered_map<uint8_t, idx_t> node_counts;
 	for (idx_t i = 0; i < allocators->size(); i++) {
 		node_counts[NumericCast<uint8_t>(i)] = 0;

@@ -66,8 +66,8 @@ public:
 			case CacheBlockState::LOADED: {
 				auto pin = buffer_manager.Pin(block->block_handle);
 				if (pin.IsValid()) {
-#ifdef DEBUG
-					D_ASSERT(Checksum(pin.Ptr(), block->nr_bytes) == block->checksum);
+#ifdef D_ASSERT_IS_ENABLED
+					D_ASSERT_V(Checksum(pin.Ptr(), block->nr_bytes) == block->checksum);
 #endif
 					result_pin = std::move(pin);
 					return;
@@ -108,7 +108,7 @@ public:
 					block->block_handle = buf.GetBlockHandle();
 					block->nr_bytes = to_read;
 					block->state = CacheBlockState::LOADED;
-#ifdef DEBUG
+#ifdef D_ASSERT_IS_ENABLED
 					block->checksum = Checksum(buf.Ptr(), to_read);
 #endif
 					result_pin = std::move(buf);

@@ -1482,7 +1482,7 @@ void DataTable::RevertAppend(DuckTransaction &transaction, idx_t start_row, idx_
 		});
 	}
 
-#ifdef DEBUG
+#ifdef D_ASSERT_IS_ENABLED
 	// Verify that our index memory is stable.
 	info->indexes.VerifyBuffers();
 #endif

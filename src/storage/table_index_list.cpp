@@ -371,10 +371,13 @@ void TableIndexList::Rebuild(const IndexRebuildScan &scan) {
 }
 
 void TableIndexList::VerifyBuffers() const {
+#ifdef D_ASSERT_IS_ENABLED
+	DUCKDB_DEBUG_VERIFY_GUARD();
 	annotated_lock_guard lock(index_entries_lock);
 	for (const auto &entry : index_entries) {
 		entry->VerifyBuffers();
 	}
+#endif
 }
 
 void TableIndexList::VerifyUpdate(std::span<const PhysicalIndex> column_ids) const {

@@ -78,10 +78,12 @@ ProjectionIndex BaseSelectBinder::TryBindGroup(ParsedExpression &expr) {
 	if (entry != group_map.end()) {
 		return entry->second;
 	}
-#ifdef DEBUG
-	for (auto map_entry : group_map) {
-		D_ASSERT(!map_entry.first.get().Equals(expr));
-		D_ASSERT(!expr.Equals(map_entry.first.get()));
+#ifdef D_ASSERT_IS_ENABLED
+	if (DUCKDB_DEBUG_VERIFY_ENABLED()) {
+		for (auto map_entry : group_map) {
+			D_ASSERT(!map_entry.first.get().Equals(expr));
+			D_ASSERT(!expr.Equals(map_entry.first.get()));
+		}
 	}
 #endif
 	return ProjectionIndex();

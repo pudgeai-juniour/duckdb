@@ -261,7 +261,7 @@ void LocalTableStorage::AppendToIndexes(DuckTransaction &transaction, TableAppen
 			current_row += UnsafeNumericCast<row_t>(chunk.size());
 		}
 
-#ifdef DEBUG
+#ifdef D_ASSERT_IS_ENABLED
 		// Verify that our index memory is stable.
 		table.VerifyIndexBuffers();
 #endif
@@ -649,7 +649,7 @@ void LocalStorage::Flush(DataTable &table, LocalTableStorage &storage, optional_
 	D_ASSERT(storage.table_entry);
 	transaction.PushAppend(*storage.table_entry, NumericCast<idx_t>(append_state.row_start), append_count);
 
-#ifdef DEBUG
+#ifdef D_ASSERT_IS_ENABLED
 	// Verify that our index memory is stable.
 	table.VerifyIndexBuffers();
 #endif
