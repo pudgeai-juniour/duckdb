@@ -660,7 +660,8 @@ struct ILikeMatcher {
 			lowered.pattern = string_t(copy, UnsafeNumericCast<uint32_t>(size));
 		}
 		// Build a case-insensitive matcher from the lowercased pattern. Returns null for patterns with '_' or only
-		// '%'; in that case we fall back to the generic matcher on the lowercased values.
+		// '%'; in that case we fall back to the generic matcher, which folds ASCII case as it reads a string that is
+		// not lowercased.
 		matcher = LikeMatcher::CreateLiteralMatcher(string(lowered.pattern.GetData(), size), lowered.has_escape,
 		                                            lowered.escape);
 	}
