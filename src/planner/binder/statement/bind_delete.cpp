@@ -46,9 +46,6 @@ vector<QualifiedName> Binder::TruncateIdentitySequences(ClientContext &context, 
 	}
 	for (auto &owned : dependencies->OwnedEntries(catalog.GetCatalogTransaction(context), table)) {
 		auto &entry = owned.get();
-		if (entry.type != CatalogType::SEQUENCE_ENTRY) {
-			continue;
-		}
 		result.emplace_back(catalog.GetName(), entry.ParentSchema(context).name, entry.name);
 	}
 	return result;
