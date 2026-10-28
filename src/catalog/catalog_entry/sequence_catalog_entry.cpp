@@ -25,7 +25,7 @@ SequenceSession &SequenceSession::Get(ClientContext &context) {
 	return *ClientData::Get(context).sequence_session;
 }
 
-SequenceData::SequenceData(CreateSequenceInfo &info)
+SequenceData::SequenceData(const CreateSequenceInfo &info)
     : usage_count(info.usage_count), counter(info.start_value), last_value(info.last_value), increment(info.increment),
       start_value(info.recorded_start.value_or(info.start_value)), min_value(info.min_value), max_value(info.max_value),
       cycle(info.cycle), cache(info.cache) {

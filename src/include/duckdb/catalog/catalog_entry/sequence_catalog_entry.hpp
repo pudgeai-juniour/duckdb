@@ -53,7 +53,7 @@ struct SequenceRuns {
 };
 
 struct SequenceData {
-	explicit SequenceData(CreateSequenceInfo &info);
+	explicit SequenceData(const CreateSequenceInfo &info);
 
 	int64_t Successor(int64_t value) const;
 

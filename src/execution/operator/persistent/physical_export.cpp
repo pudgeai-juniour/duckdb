@@ -6,7 +6,6 @@
 #include "duckdb/catalog/catalog_entry/table_catalog_entry.hpp"
 #include "duckdb/common/extension_type_info.hpp"
 #include "duckdb/common/file_system.hpp"
-#include "duckdb/common/operator/add.hpp"
 #include "duckdb/common/string_util.hpp"
 #include "duckdb/parallel/meta_pipeline.hpp"
 #include "duckdb/parallel/pipeline.hpp"
@@ -147,26 +146,16 @@ static string SequenceSetval(const CreateSequenceInfo &info, const QualifiedName
 	if (info.usage_count == 0) {
 		return string();
 	}
-	auto counter = info.start_value;
+	const SequenceData data(info);
 	int64_t value;
 	bool is_called = true;
-	bool last_is_current = false;
-	if (info.last_value) {
-		int64_t next;
-		bool next_known = TryAddOperator::Operation(*info.last_value, info.increment, next);
-		if (info.cycle && (!next_known || next < info.min_value || next > info.max_value)) {
-			next = info.increment > 0 ? info.min_value : info.max_value;
-			next_known = true;
-		}
-		last_is_current = next_known && next == counter;
-	}
-	if (last_is_current) {
-		value = *info.last_value;
-	} else if (counter >= info.min_value && counter <= info.max_value) {
-		value = counter;
+	if (data.last_value && data.Successor(*data.last_value) == data.counter) {
+		value = *data.last_value;
+	} else if (data.counter >= data.min_value && data.counter <= data.max_value) {
+		value = data.counter;
 		is_called = false;
 	} else {
-		value = info.increment > 0 ? info.max_value : info.min_value;
+		value = data.increment > 0 ? data.max_value : data.min_value;
 	}
 	return "SELECT setval(" + KeywordHelper::WriteQuoted(name.ToString()) + ", " + to_string(value) + ", " +
 	       (is_called ? "true" : "false") + ");\n";
