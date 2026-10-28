@@ -807,7 +807,7 @@ void ILikeEscapeFunction(DataChunk &args, ExpressionState &state, Vector &result
 		ILikeConstantPattern<INVERT, false>(lstate, str_vec, pattern, escape, result);
 		return;
 	}
-	// non-constant pattern/escape: fall back to the generic per-row implementation
+	// the pattern or escape differs between rows: fall back to the generic per-row implementation
 	TernaryExecutor::Execute<string_t, string_t, string_t, bool>(
 	    str_vec, pattern_vec, escape_vec, result, [&](string_t str, string_t pattern, string_t escape) {
 		    bool match = ILikeOperatorFunction<false>(lstate, str, pattern, escape);
@@ -816,8 +816,8 @@ void ILikeEscapeFunction(DataChunk &args, ExpressionState &state, Vector &result
 }
 
 // Execution function for ILIKE / NOT ILIKE.
-// When the pattern is constant we lowercase it exactly once instead of once per row, and we reuse a single
-// scratch buffer to lowercase each string value instead of heap-allocating per row.
+// When every row has the same pattern we lowercase it exactly once instead of once per row, and a string that must
+// be lowercased goes through a single scratch buffer instead of a heap allocation per row.
 template <bool INVERT, bool KNOWN_ASCII>
 void ILikeFunction(DataChunk &input, ExpressionState &state, Vector &result) {
 	auto &lstate = ExecuteFunctionState::GetFunctionState(state)->Cast<ILikeLocalState>();
@@ -828,7 +828,7 @@ void ILikeFunction(DataChunk &input, ExpressionState &state, Vector &result) {
 		ILikeConstantPattern<INVERT, KNOWN_ASCII>(lstate, input.data[0], pattern, escape, result);
 		return;
 	}
-	// non-constant pattern: fall back to the generic per-row implementation
+	// the pattern differs between rows: fall back to the generic per-row implementation
 	BinaryExecutor::Execute<string_t, string_t, bool>(
 	    input.data[0], pattern_vec, result, [&](string_t str, string_t pattern) {
 		    bool match = ILikeOperatorFunction<KNOWN_ASCII>(lstate, str, pattern, escape);
