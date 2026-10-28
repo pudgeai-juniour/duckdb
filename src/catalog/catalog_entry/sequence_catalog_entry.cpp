@@ -179,21 +179,21 @@ static SequenceData LogAhead(SequenceData data, idx_t steps) {
 			data.last_value = last;
 			return data;
 		}
+		const auto bound = data.increment > 0 ? data.max_value : data.min_value;
+		const bool exhausted = data.counter == bound && data.last_value &&
+		                       !TryAddOperator::Operation(*data.last_value, data.increment, next);
 		auto increment = hugeint_t(data.increment);
-		auto limit =
-		    data.increment > 0
-		        ? MinValue<hugeint_t>(data.max_value, hugeint_t(NumericLimits<int64_t>::Maximum()) - increment)
-		        : MaxValue<hugeint_t>(data.min_value, hugeint_t(NumericLimits<int64_t>::Minimum()) - increment);
 		auto counter = hugeint_t(data.counter);
 		hugeint_t available = 0;
-		if (data.counter >= data.min_value && data.counter <= data.max_value) {
-			auto distance = data.increment > 0 ? limit - counter : counter - limit;
-			if (distance >= 0) {
-				available = distance / (data.increment > 0 ? increment : -increment) + 1;
-			}
+		if (!exhausted && data.counter >= data.min_value && data.counter <= data.max_value) {
+			available = (data.increment > 0 ? hugeint_t(bound) - counter : counter - hugeint_t(bound)) /
+			                (data.increment > 0 ? increment : -increment) +
+			            1;
 		}
 		auto taken = MinValue<hugeint_t>(available, Hugeint::Convert(steps));
-		data.counter = Hugeint::Cast<int64_t>(counter + taken * increment);
+		if (!Hugeint::TryCast<int64_t>(counter + taken * increment, data.counter)) {
+			data.counter = bound;
+		}
 		data.usage_count += Hugeint::Cast<uint64_t>(taken);
 		if (taken > 0) {
 			data.last_value = Hugeint::Cast<int64_t>(counter + (taken - 1) * increment);
@@ -202,15 +202,7 @@ static SequenceData LogAhead(SequenceData data, idx_t steps) {
 	}
 	for (idx_t i = 0; i < steps; i++) {
 		data.last_value = data.counter;
-		int64_t next;
-		if (!TryAddOperator::Operation(data.counter, data.increment, next)) {
-			next = data.increment < 0 ? data.max_value : data.min_value;
-		} else if (next < data.min_value) {
-			next = data.max_value;
-		} else if (next > data.max_value) {
-			next = data.min_value;
-		}
-		data.counter = next;
+		data.counter = data.Successor(data.counter);
 		data.usage_count++;
 	}
 	return data;
@@ -361,18 +353,11 @@ void SequenceCatalogEntry::FetchLocked(SequenceSessionValue &cached, idx_t neede
 	} else {
 		int64_t expected = first;
 		while (taken < count && data.counter == expected) {
-			int64_t result = data.counter;
-			bool overflow = !TryAddOperator::Operation(data.counter, data.increment, data.counter);
-			if (overflow) {
-				data.counter = data.increment < 0 ? data.max_value : data.min_value;
-			} else if (data.counter < data.min_value) {
-				data.counter = data.max_value;
-			} else if (data.counter > data.max_value) {
-				data.counter = data.min_value;
-			}
+			const int64_t result = data.counter;
+			data.counter = data.Successor(result);
 			data.usage_count++;
 			taken++;
-			if (overflow || !TryAddOperator::Operation(result, data.increment, expected)) {
+			if (!TryAddOperator::Operation(result, data.increment, expected)) {
 				break;
 			}
 		}
@@ -480,21 +465,13 @@ int64_t SequenceCatalogEntry::SetValue(DuckTransaction &transaction, int64_t val
 		throw SequenceException::OutOfBounds(name, value, data.min_value, data.max_value);
 	}
 	if (is_called) {
-		const bool overflow = !TryAddOperator::Operation(value, data.increment, data.counter);
-		if (data.cycle) {
-			if (overflow) {
-				data.counter = data.increment < 0 ? data.max_value : data.min_value;
-			} else if (data.counter < data.min_value) {
-				data.counter = data.max_value;
-			} else if (data.counter > data.max_value) {
-				data.counter = data.min_value;
-			}
-		} else if (overflow) {
-			data.counter = data.increment < 0 ? data.min_value : data.max_value;
-		}
+		data.counter = data.Successor(value);
 		data.last_value = value;
 	} else {
 		data.counter = value;
+		if (catalog.Compatibility() == SqlCompatibility::POSTGRES) {
+			data.last_value.reset();
+		}
 	}
 	data.usage_count = MaxValue(data.usage_count, state->reserved_usage_count) + 1;
 	if (logs_values) {
