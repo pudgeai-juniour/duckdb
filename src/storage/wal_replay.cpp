@@ -2189,15 +2189,11 @@ void WriteAheadLogDeserializer::ReplayAdoptSegments() {
 
 std::span<const data_t> WriteAheadLogDeserializer::ReadBitmap(const field_id_t size_field,
                                                               const field_id_t docs_field) {
-	if (!data) {
-		throw DataCorruptionException("Corrupt WAL: a log table's entry in an unframed WAL");
-	}
+	D_ASSERT(data);
 	const auto size = deserializer.ReadProperty<idx_t>(size_field, "size");
 	deserializer.OnPropertyBegin(docs_field, "docs");
 	const auto position = stream.GetPosition();
-	if (size > stream.GetCapacity() - position) {
-		throw SerializationException("Failed to deserialize: not enough data in buffer to fulfill read request");
-	}
+	D_ASSERT(size <= stream.GetCapacity() - position);
 	stream.SetPosition(position + size);
 	deserializer.OnPropertyEnd();
 	return {stream.GetData() + position, size};
@@ -2215,14 +2211,12 @@ void WriteAheadLogDeserializer::ReplayDeleteRowPositions() {
 	if (DeserializeOnly()) {
 		return;
 	}
-	if (!state.current_table && state.current_log_table) {
+	if (state.current_table) {
+		throw DataCorruptionException("Corrupt WAL: row position delete without a log table");
+	}
+	if (state.current_log_table) {
 		state.current_log_table->ReplayDeleteRowPositions(std::move(segments), std::move(docs));
-		return;
 	}
-	if (!state.current_table && state.table_storage) {
-		return;
-	}
-	throw DataCorruptionException("Corrupt WAL: row position delete without a log table");
 }
 
 void WriteAheadLogDeserializer::ReplayRowPositionMaps() {
@@ -2245,14 +2239,12 @@ void WriteAheadLogDeserializer::ReplayRowPositionMaps() {
 	if (DeserializeOnly()) {
 		return;
 	}
-	if (!state.current_table && state.current_log_table) {
+	if (state.current_table) {
+		throw DataCorruptionException("Corrupt WAL: row position maps without a log table");
+	}
+	if (state.current_log_table) {
 		state.current_log_table->ReplayRowPositionMaps(std::move(maps));
-		return;
 	}
-	if (!state.current_table && state.table_storage) {
-		return;
-	}
-	throw DataCorruptionException("Corrupt WAL: row position maps without a log table");
 }
 
 void WriteAheadLogDeserializer::ReplayCheckpoint() {

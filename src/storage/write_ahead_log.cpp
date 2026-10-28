@@ -144,7 +144,8 @@ public:
 	}
 
 	MemoryStream &Target() {
-		return direct ? *direct : memory_stream;
+		D_ASSERT(direct);
+		return *direct;
 	}
 
 	void Flush() {
