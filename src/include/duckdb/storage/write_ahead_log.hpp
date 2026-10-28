@@ -20,7 +20,6 @@
 #include "duckdb/storage/block.hpp"
 
 #include <absl/functional/function_ref.h>
-#include <span>
 
 namespace roaring::api {
 struct roaring_bitmap_s;
@@ -48,9 +47,14 @@ struct PersistentCollectionData;
 
 enum class WALInitState { NO_WAL, UNINITIALIZED, UNINITIALIZED_REQUIRES_TRUNCATE, INITIALIZED };
 
+struct WALRowPositionGroup {
+	uint64_t segment = 0;
+	const ::roaring::api::roaring_bitmap_t *docs = nullptr;
+};
+
 struct WALRowPositionMap {
-	uint32_t source = 0;
-	uint32_t target = 0;
+	uint64_t source = 0;
+	uint64_t target = 0;
 	uint32_t base = 0;
 	uint32_t rank_begin = 0;
 	uint32_t rank_end = 0;
@@ -64,8 +68,7 @@ public:
 	void WriteInsert(DataChunk &chunk);
 	void WriteTruncateTable();
 	void WriteAdoptSegments(vector<string> segments);
-	void WriteDeleteRowPositions(std::span<const uint32_t> segments,
-	                             absl::FunctionRef<const ::roaring::api::roaring_bitmap_t *(idx_t)> docs);
+	void WriteDeleteRowPositions(idx_t count, absl::FunctionRef<WALRowPositionGroup(idx_t)> groups);
 	void WriteRowPositionMaps(idx_t count, absl::FunctionRef<WALRowPositionMap(idx_t)> maps);
 
 private:

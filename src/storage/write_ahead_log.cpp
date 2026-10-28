@@ -756,14 +756,13 @@ void WALEntryBuffer::WriteAdoptSegments(vector<string> segments) {
 	entry_count++;
 }
 
-void WALEntryBuffer::WriteDeleteRowPositions(std::span<const uint32_t> segments,
-                                             absl::FunctionRef<const ::roaring::api::roaring_bitmap_t *(idx_t)> docs) {
-	D_ASSERT(!segments.empty());
+void WALEntryBuffer::WriteDeleteRowPositions(idx_t count, absl::FunctionRef<WALRowPositionGroup(idx_t)> groups) {
 	WriteAheadLogSerializer serializer(database, stream, WALType::DELETE_ROW_POSITIONS);
-	serializer.WriteList(101, "groups", segments.size(), [&](Serializer::List &list, idx_t i) {
+	serializer.WriteList(101, "groups", count, [&](Serializer::List &list, idx_t i) {
+		const auto written = groups(i);
 		list.WriteObject([&](Serializer &group) {
-			group.WriteProperty(100, "segment", segments[i]);
-			serializer.WriteBitmap(101, 102, docs(i));
+			group.WriteProperty(100, "segment", written.segment);
+			serializer.WriteBitmap(101, 102, written.docs);
 		});
 	});
 	serializer.End();

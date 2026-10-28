@@ -2204,11 +2204,11 @@ std::span<const data_t> WriteAheadLogDeserializer::ReadBitmap(const field_id_t s
 }
 
 void WriteAheadLogDeserializer::ReplayDeleteRowPositions() {
-	vector<uint32_t> segments;
+	vector<uint64_t> segments;
 	vector<std::span<const data_t>> docs;
 	deserializer.ReadList(101, "groups", [&](Deserializer::List &list, idx_t) {
 		list.ReadObject([&](Deserializer &group) {
-			segments.push_back(group.ReadProperty<uint32_t>(100, "segment"));
+			segments.push_back(group.ReadProperty<uint64_t>(100, "segment"));
 			docs.push_back(ReadBitmap(101, 102));
 		});
 	});
@@ -2229,8 +2229,8 @@ void WriteAheadLogDeserializer::ReplayRowPositionMaps() {
 	vector<WALFrozenRowPositionMap> maps;
 	deserializer.ReadList(101, "maps", [&](Deserializer::List &list, idx_t) {
 		list.ReadObject([&](Deserializer &map) {
-			const auto source = map.ReadProperty<uint32_t>(100, "source");
-			const auto target = map.ReadProperty<uint32_t>(101, "target");
+			const auto source = map.ReadProperty<uint64_t>(100, "source");
+			const auto target = map.ReadProperty<uint64_t>(101, "target");
 			const auto base = map.ReadProperty<uint32_t>(102, "base");
 			const auto rank_begin = map.ReadProperty<uint32_t>(103, "rank_begin");
 			const auto rank_end = map.ReadProperty<uint32_t>(104, "rank_end");
