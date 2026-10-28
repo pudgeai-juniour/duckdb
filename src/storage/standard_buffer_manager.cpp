@@ -405,12 +405,15 @@ BufferHandle StandardBufferManager::Pin(const QueryContext &context, shared_ptr<
 		auto &memory_charge = block_memory.GetMemoryCharge(lock);
 		memory_charge = std::move(reservation);
 		// in the case of a variable sized block, the buffer may be smaller than a full block.
-		int64_t delta = NumericCast<int64_t>(block_memory.GetBuffer(lock)->AllocSize()) -
-		                NumericCast<int64_t>(block_memory.GetMemoryUsage());
-		if (delta) {
-			block_memory.ChangeMemoryUsage(lock, delta);
+		auto &buffer = *block_memory.GetBuffer(lock);
+		if (buffer.OwnsInternalBuffer()) {
+			int64_t delta =
+			    NumericCast<int64_t>(buffer.AllocSize()) - NumericCast<int64_t>(block_memory.GetMemoryUsage());
+			if (delta) {
+				block_memory.ChangeMemoryUsage(lock, delta);
+			}
+			D_ASSERT(block_memory.GetMemoryUsage() == buffer.AllocSize());
 		}
-		D_ASSERT(block_memory.GetMemoryUsage() == block_memory.GetBuffer(lock)->AllocSize());
 	}
 
 	// we should have a valid BufferHandle by now, either because the block was already loaded, or because we loaded it
@@ -460,10 +463,10 @@ void StandardBufferManager::Unpin(shared_ptr<BlockHandle> &handle) {
 		auto new_readers = block_memory.DecrementReaders();
 		if (new_readers == 0) {
 			VerifyZeroReaders(lock, handle);
-			if (block_memory.MustAddToEvictionQueue()) {
-				purge = buffer_pool.AddToEvictionQueue(lock, handle);
-			} else {
+			if (!block_memory.MustAddToEvictionQueue()) {
 				block_memory.Unload(lock);
+			} else if (block_memory.GetMemoryUsage() != 0) {
+				purge = buffer_pool.AddToEvictionQueue(lock, handle);
 			}
 		}
 	}

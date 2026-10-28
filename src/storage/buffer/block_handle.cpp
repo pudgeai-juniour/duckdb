@@ -45,7 +45,7 @@ BlockMemory::~BlockMemory() { // NOLINT: allow internal exceptions
 
 	// Erase the block memory, if it is still loaded.
 	if (GetBuffer() && GetState() == BlockState::BLOCK_LOADED) {
-		D_ASSERT(GetMemoryCharge().size > 0);
+		D_ASSERT(GetMemoryCharge().size > 0 || GetMemoryUsage() == 0);
 		SetBuffer(nullptr);
 		GetMemoryCharge().Resize(0);
 	} else {
