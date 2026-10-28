@@ -148,12 +148,15 @@ public:
 		return direct ? direct->GetPosition() - header_offset - 2 * sizeof(uint64_t) : memory_stream.GetPosition();
 	}
 
-	MemoryStream &Payload() {
-		return direct ? *direct : memory_stream;
-	}
-
-	idx_t PayloadPosition() const {
-		return direct ? direct->GetPosition() - header_offset - 2 * sizeof(uint64_t) : memory_stream.GetPosition();
+	data_ptr_t ReserveAligned(idx_t size, idx_t alignment) {
+		auto &payload = direct ? *direct : memory_stream;
+		const auto position = PayloadSize();
+		const auto padding = AlignValue<idx_t>(position, alignment) - position;
+		payload.GrowCapacity(padding + size);
+		auto bytes = payload.GetData() + payload.GetPosition();
+		memset(bytes, 0, padding);
+		payload.SetPosition(payload.GetPosition() + padding + size);
+		return bytes + padding;
 	}
 
 	void Flush() {
@@ -303,20 +306,14 @@ public:
 		serializer.WriteList(field_id, tag, count, func);
 	}
 
-	void WriteBitmap(const field_id_t size_field, const field_id_t docs_field,
+	void WriteBitmap(const field_id_t size_field, const field_id_t bitmap_field, const char *tag,
 	                 const ::roaring::api::roaring_bitmap_t *bitmap) {
 		const idx_t size = bitmap ? ::roaring::api::roaring_bitmap_frozen_size_in_bytes(bitmap) : 0;
 		serializer.WriteProperty(size_field, "size", size);
-		serializer.OnPropertyBegin(docs_field, "docs");
+		serializer.OnPropertyBegin(bitmap_field, tag);
 		if (size != 0) {
-			auto &payload = checksum_writer.Payload();
-			const auto position = checksum_writer.PayloadPosition();
-			const auto padding = AlignValue<idx_t>(position, WAL_FROZEN_BITMAP_ALIGNMENT) - position;
-			payload.GrowCapacity(padding + size);
-			auto bytes = payload.GetData() + payload.GetPosition();
-			memset(bytes, 0, padding);
-			::roaring::api::roaring_bitmap_frozen_serialize(bitmap, char_ptr_cast(bytes + padding));
-			payload.SetPosition(payload.GetPosition() + padding + size);
+			auto bytes = checksum_writer.ReserveAligned(size, WAL_FROZEN_BITMAP_ALIGNMENT);
+			::roaring::api::roaring_bitmap_frozen_serialize(bitmap, char_ptr_cast(bytes));
 		}
 		serializer.OnPropertyEnd();
 	}
@@ -771,10 +768,10 @@ void WALEntryBuffer::WriteAdoptSegments(vector<string> segments) {
 void WALEntryBuffer::WriteDeleteRowPositions(idx_t count, absl::FunctionRef<WALRowPositionGroup(idx_t)> groups) {
 	WriteAheadLogSerializer serializer(database, stream, WALType::DELETE_ROW_POSITIONS);
 	serializer.WriteList(101, "groups", count, [&](Serializer::List &list, idx_t i) {
-		const auto written = groups(i);
-		list.WriteObject([&](Serializer &group) {
-			group.WriteProperty(100, "segment", written.segment);
-			serializer.WriteBitmap(101, 102, written.docs);
+		const auto group = groups(i);
+		list.WriteObject([&](Serializer &object) {
+			object.WriteProperty(100, "segment", group.segment);
+			serializer.WriteBitmap(101, 102, "docs", group.docs);
 		});
 	});
 	serializer.End();
@@ -783,17 +780,16 @@ void WALEntryBuffer::WriteDeleteRowPositions(idx_t count, absl::FunctionRef<WALR
 
 void WALEntryBuffer::WriteRowPositionMaps(uint64_t source, idx_t count,
                                           absl::FunctionRef<WALRowPositionMap(idx_t)> maps) {
-	D_ASSERT(count != 0);
 	WriteAheadLogSerializer serializer(database, stream, WALType::ROW_POSITION_MAPS);
 	serializer.WriteProperty(101, "source", source);
 	serializer.WriteList(102, "maps", count, [&](Serializer::List &list, idx_t i) {
-		const auto written = maps(i);
-		list.WriteObject([&](Serializer &map) {
-			map.WriteProperty(100, "target", written.target);
-			map.WriteProperty(101, "base", written.base);
-			map.WriteProperty(102, "rank_begin", written.rank_begin);
-			map.WriteProperty(103, "rank_end", written.rank_end);
-			serializer.WriteBitmap(104, 105, written.mask);
+		const auto map = maps(i);
+		list.WriteObject([&](Serializer &object) {
+			object.WriteProperty(100, "target", map.target);
+			object.WriteProperty(101, "base", map.base);
+			object.WriteProperty(102, "rank_begin", map.rank_begin);
+			object.WriteProperty(103, "rank_end", map.rank_end);
+			serializer.WriteBitmap(104, 105, "mask", map.mask);
 		});
 	});
 	serializer.End();

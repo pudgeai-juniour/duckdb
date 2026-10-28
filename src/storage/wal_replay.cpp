@@ -131,7 +131,7 @@ public:
 
 	static std::shared_ptr<data_t> AllocateEntry(idx_t size) {
 		static constexpr auto alignment = std::align_val_t {WAL_FROZEN_BITMAP_ALIGNMENT};
-		return std::shared_ptr<data_t>(static_cast<data_t *>(::operator new(MaxValue<idx_t>(size, 1), alignment)),
+		return std::shared_ptr<data_t>(static_cast<data_t *>(::operator new(size, alignment)),
 		                               [](data_t *entry) { ::operator delete(entry, alignment); });
 	}
 
@@ -342,6 +342,8 @@ protected:
 		case WALType::DROP_TRIGGER:
 		case WALType::TRUNCATE_TABLE:
 		case WALType::ADOPT_SEGMENTS:
+		case WALType::DELETE_ROW_POSITIONS:
+		case WALType::ROW_POSITION_MAPS:
 			return true;
 		default:
 			return false;
@@ -416,7 +418,7 @@ protected:
 private:
 	optional_ptr<TableLogStorage> LogTable(const char *what) const;
 	void ReplayIndexData(IndexStorageInfo &info, bool keep);
-	std::span<const data_t> ReadBitmap(field_id_t size_field, field_id_t docs_field);
+	std::span<const data_t> ReadBitmap(field_id_t size_field, field_id_t bitmap_field, const char *tag);
 
 private:
 	ReplayState &state;
@@ -2193,10 +2195,10 @@ void WriteAheadLogDeserializer::ReplayAdoptSegments() {
 }
 
 std::span<const data_t> WriteAheadLogDeserializer::ReadBitmap(const field_id_t size_field,
-                                                              const field_id_t docs_field) {
+                                                              const field_id_t bitmap_field, const char *tag) {
 	D_ASSERT(data);
 	const auto size = deserializer.ReadProperty<idx_t>(size_field, "size");
-	deserializer.OnPropertyBegin(docs_field, "docs");
+	deserializer.OnPropertyBegin(bitmap_field, tag);
 	auto position = stream.GetPosition();
 	if (size != 0) {
 		position = AlignValue<idx_t>(position, WAL_FROZEN_BITMAP_ALIGNMENT);
@@ -2210,19 +2212,17 @@ std::span<const data_t> WriteAheadLogDeserializer::ReadBitmap(const field_id_t s
 void WriteAheadLogDeserializer::ReplayDeleteRowPositions() {
 	vector<WALFrozenRowPositionGroup> groups;
 	deserializer.ReadList(101, "groups", [&](Deserializer::List &list, idx_t) {
-		list.ReadObject([&](Deserializer &group) {
-			const auto segment = group.ReadProperty<uint64_t>(100, "segment");
-			groups.push_back({.segment = segment, .docs = ReadBitmap(101, 102)});
+		list.ReadObject([&](Deserializer &object) {
+			auto &group = groups.emplace_back();
+			group.segment = object.ReadProperty<uint64_t>(100, "segment");
+			group.docs = ReadBitmap(101, 102, "docs");
 		});
 	});
 	if (DeserializeOnly()) {
 		return;
 	}
-	if (state.current_table) {
-		throw DataCorruptionException("Corrupt WAL: row position delete without a log table");
-	}
-	if (state.current_log_table) {
-		state.current_log_table->ReplayDeleteRowPositions(data, groups);
+	if (auto log = LogTable("row position delete")) {
+		log->ReplayDeleteRowPositions(data, groups);
 	}
 }
 
@@ -2230,26 +2230,20 @@ void WriteAheadLogDeserializer::ReplayRowPositionMaps() {
 	const auto source = deserializer.ReadProperty<uint64_t>(101, "source");
 	vector<WALFrozenRowPositionMap> maps;
 	deserializer.ReadList(102, "maps", [&](Deserializer::List &list, idx_t) {
-		list.ReadObject([&](Deserializer &map) {
-			const auto target = map.ReadProperty<uint64_t>(100, "target");
-			const auto base = map.ReadProperty<uint32_t>(101, "base");
-			const auto rank_begin = map.ReadProperty<uint32_t>(102, "rank_begin");
-			const auto rank_end = map.ReadProperty<uint32_t>(103, "rank_end");
-			maps.push_back({.target = target,
-			                .base = base,
-			                .rank_begin = rank_begin,
-			                .rank_end = rank_end,
-			                .mask = ReadBitmap(104, 105)});
+		list.ReadObject([&](Deserializer &object) {
+			auto &map = maps.emplace_back();
+			map.target = object.ReadProperty<uint64_t>(100, "target");
+			map.base = object.ReadProperty<uint32_t>(101, "base");
+			map.rank_begin = object.ReadProperty<uint32_t>(102, "rank_begin");
+			map.rank_end = object.ReadProperty<uint32_t>(103, "rank_end");
+			map.mask = ReadBitmap(104, 105, "mask");
 		});
 	});
 	if (DeserializeOnly()) {
 		return;
 	}
-	if (state.current_table) {
-		throw DataCorruptionException("Corrupt WAL: row position maps without a log table");
-	}
-	if (state.current_log_table) {
-		state.current_log_table->ReplayRowPositionMaps(data, source, maps);
+	if (auto log = LogTable("row position maps")) {
+		log->ReplayRowPositionMaps(data, source, maps);
 	}
 }
 
