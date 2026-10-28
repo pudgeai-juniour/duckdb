@@ -80,12 +80,6 @@ void LogicalDependencyList::AddDependency(CatalogEntry &entry, DependencyDepende
 	AddDependency(dependency);
 }
 
-void LogicalDependencyList::AddOwnedDependency(CatalogEntry &entry) {
-	LogicalDependency dependency(entry);
-	dependency.owned_by = true;
-	AddDependency(dependency);
-}
-
 void LogicalDependencyList::AddDependency(const LogicalDependency &entry) {
 	auto it = set.find(entry);
 	if (it == set.end()) {

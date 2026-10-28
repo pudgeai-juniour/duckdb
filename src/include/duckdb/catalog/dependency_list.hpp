@@ -60,7 +60,6 @@ class LogicalDependencyList {
 public:
 	DUCKDB_API void AddDependency(CatalogEntry &entry);
 	DUCKDB_API void AddDependency(CatalogEntry &entry, DependencyDependentFlags flags);
-	DUCKDB_API void AddOwnedDependency(CatalogEntry &entry);
 	DUCKDB_API void AddDependency(const LogicalDependency &entry);
 	DUCKDB_API bool Contains(CatalogEntry &entry);
 
