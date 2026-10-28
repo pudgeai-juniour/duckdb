@@ -144,6 +144,10 @@ public:
 		memory_stream.WriteData(buffer, write_size);
 	}
 
+	idx_t PayloadSize() const {
+		return direct ? direct->GetPosition() - header_offset - 2 * sizeof(uint64_t) : memory_stream.GetPosition();
+	}
+
 	MemoryStream &Payload() {
 		return direct ? *direct : memory_stream;
 	}
@@ -156,7 +160,7 @@ public:
 		if (direct) {
 			auto header = direct->GetData() + header_offset;
 			auto body = header + 2 * sizeof(uint64_t);
-			uint64_t size = direct->GetPosition() - header_offset - 2 * sizeof(uint64_t);
+			uint64_t size = PayloadSize();
 			Store<uint64_t>(size, header);
 			Store<uint64_t>(Checksum(body, size), header + sizeof(uint64_t));
 			return;

@@ -341,6 +341,8 @@ protected:
 		case WALType::UPDATE_TUPLE:
 		case WALType::CREATE_TRIGGER:
 		case WALType::DROP_TRIGGER:
+		case WALType::TRUNCATE_TABLE:
+		case WALType::ADOPT_SEGMENTS:
 			return true;
 		default:
 			return false;
@@ -413,6 +415,7 @@ protected:
 	void ReplayCheckpoint();
 
 private:
+	optional_ptr<TableLogStorage> LogTable(const char *what) const;
 	void ReplayIndexData(IndexStorageInfo &info, bool keep);
 	std::span<const data_t> ReadBitmap(field_id_t size_field, field_id_t docs_field);
 
@@ -2164,18 +2167,20 @@ void WriteAheadLogDeserializer::ReplayUpdate() {
 	state.current_table->GetStorage().UpdateColumn(*state.current_table, context, row_ids, column_path, chunk);
 }
 
+optional_ptr<TableLogStorage> WriteAheadLogDeserializer::LogTable(const char *what) const {
+	if (state.current_table) {
+		throw DataCorruptionException("Corrupt WAL: %s without a log table", what);
+	}
+	return state.current_log_table;
+}
+
 void WriteAheadLogDeserializer::ReplayTruncateTable() {
 	if (DeserializeOnly()) {
 		return;
 	}
-	if (!state.current_table && state.current_log_table) {
-		state.current_log_table->ReplayTruncate();
-		return;
+	if (auto log = LogTable("truncate")) {
+		log->ReplayTruncate();
 	}
-	if (!state.current_table && state.table_storage) {
-		return;
-	}
-	throw DataCorruptionException("Corrupt WAL: truncate without a log table");
 }
 
 void WriteAheadLogDeserializer::ReplayAdoptSegments() {
@@ -2183,14 +2188,9 @@ void WriteAheadLogDeserializer::ReplayAdoptSegments() {
 	if (DeserializeOnly()) {
 		return;
 	}
-	if (!state.current_table && state.current_log_table) {
-		state.current_log_table->ReplayAdoptSegments(std::move(entry.segments));
-		return;
+	if (auto log = LogTable("segments")) {
+		log->ReplayAdoptSegments(std::move(entry.segments));
 	}
-	if (!state.current_table && state.table_storage) {
-		return;
-	}
-	throw DataCorruptionException("Corrupt WAL: segments without a log table");
 }
 
 std::span<const data_t> WriteAheadLogDeserializer::ReadBitmap(const field_id_t size_field,
