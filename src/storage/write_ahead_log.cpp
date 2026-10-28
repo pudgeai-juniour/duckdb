@@ -777,18 +777,19 @@ void WALEntryBuffer::WriteDeleteRowPositions(idx_t count, absl::FunctionRef<WALR
 	entry_count++;
 }
 
-void WALEntryBuffer::WriteRowPositionMaps(idx_t count, absl::FunctionRef<WALRowPositionMap(idx_t)> maps) {
+void WALEntryBuffer::WriteRowPositionMaps(uint64_t source, idx_t count,
+                                          absl::FunctionRef<WALRowPositionMap(idx_t)> maps) {
 	D_ASSERT(count != 0);
 	WriteAheadLogSerializer serializer(database, stream, WALType::ROW_POSITION_MAPS);
-	serializer.WriteList(101, "maps", count, [&](Serializer::List &list, idx_t i) {
+	serializer.WriteProperty(101, "source", source);
+	serializer.WriteList(102, "maps", count, [&](Serializer::List &list, idx_t i) {
 		const auto written = maps(i);
 		list.WriteObject([&](Serializer &map) {
-			map.WriteProperty(100, "source", written.source);
-			map.WriteProperty(101, "target", written.target);
-			map.WriteProperty(102, "base", written.base);
-			map.WriteProperty(103, "rank_begin", written.rank_begin);
-			map.WriteProperty(104, "rank_end", written.rank_end);
-			serializer.WriteBitmap(105, 106, written.mask);
+			map.WriteProperty(100, "target", written.target);
+			map.WriteProperty(101, "base", written.base);
+			map.WriteProperty(102, "rank_begin", written.rank_begin);
+			map.WriteProperty(103, "rank_end", written.rank_end);
+			serializer.WriteBitmap(104, 105, written.mask);
 		});
 	});
 	serializer.End();

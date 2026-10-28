@@ -53,7 +53,6 @@ struct WALRowPositionGroup {
 };
 
 struct WALRowPositionMap {
-	uint64_t source = 0;
 	uint64_t target = 0;
 	uint32_t base = 0;
 	uint32_t rank_begin = 0;
@@ -69,7 +68,7 @@ public:
 	void WriteTruncateTable();
 	void WriteAdoptSegments(vector<string> segments);
 	void WriteDeleteRowPositions(idx_t count, absl::FunctionRef<WALRowPositionGroup(idx_t)> groups);
-	void WriteRowPositionMaps(idx_t count, absl::FunctionRef<WALRowPositionMap(idx_t)> maps);
+	void WriteRowPositionMaps(uint64_t source, idx_t count, absl::FunctionRef<WALRowPositionMap(idx_t)> maps);
 
 private:
 	friend class WriteAheadLog;
