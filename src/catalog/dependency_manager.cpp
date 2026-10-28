@@ -1215,9 +1215,8 @@ void DependencyManager::ReorderEntry(CatalogTransaction transaction, CatalogEntr
 		return;
 	}
 	visited.insert(catalog_entry);
-	if (created_by_owner) {
-		auto owner = OwnerOf(transaction, catalog_entry);
-		if (owner && created_by_owner(*owner, catalog_entry)) {
+	if (created_by_owner && created_by_owner(catalog_entry)) {
+		if (auto owner = OwnerOf(transaction, catalog_entry)) {
 			ReorderEntry(transaction, *owner, visited, order, allow_internal, created_by_owner);
 		}
 	}

@@ -104,7 +104,7 @@ public:
 	catalog_entry_vector_t OwnedEntries(CatalogTransaction transaction, const CatalogEntry &owner);
 	optional_ptr<CatalogEntry> OwnerOf(CatalogTransaction transaction, CatalogEntry &entry);
 
-	using created_by_owner_t = std::function<bool(CatalogEntry &owner, CatalogEntry &owned)>;
+	using created_by_owner_t = std::function<bool(const CatalogEntry &owned)>;
 	//! Get the order of entries needed by EXPORT, the objects with no dependencies are exported first
 	void ReorderEntries(catalog_entry_vector_t &entries);
 	void ReorderEntries(catalog_entry_vector_t &entries, ClientContext &context,
