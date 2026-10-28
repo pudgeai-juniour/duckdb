@@ -31,6 +31,20 @@ SequenceData::SequenceData(CreateSequenceInfo &info)
       cycle(info.cycle), cache(info.cache) {
 }
 
+int64_t SequenceData::Successor(int64_t value) const {
+	int64_t next;
+	if (!TryAddOperator::Operation(value, increment, next)) {
+		return (increment > 0) == cycle ? min_value : max_value;
+	}
+	if (cycle && next > max_value) {
+		return min_value;
+	}
+	if (cycle && next < min_value) {
+		return max_value;
+	}
+	return next;
+}
+
 SequenceState::SequenceState(const SequenceData &data_p)
     : data(data_p), reserved_usage_count(data.usage_count), reserved_counter(data.counter),
       reserved_last_value(data.last_value), durable_usage_count(data.usage_count), durable_counter(data.counter) {
@@ -522,16 +536,9 @@ int64_t SequenceCatalogEntry::NextValues(DuckTransaction &transaction, idx_t cou
 	int64_t result = counter;
 	for (idx_t i = 0; i < count; i++) {
 		result = counter;
-		bool overflow = !TryAddOperator::Operation(result, data.increment, counter);
-		if (data.cycle) {
-			if (overflow) {
-				counter = data.increment < 0 ? data.max_value : data.min_value;
-			} else if (counter < data.min_value) {
-				counter = data.max_value;
-			} else if (counter > data.max_value) {
-				counter = data.min_value;
-			}
-		} else {
+		if (!data.cycle) {
+			int64_t next;
+			const bool overflow = !TryAddOperator::Operation(result, data.increment, next);
 			if (result < data.min_value || (overflow && data.increment < 0)) {
 				throw SequenceException::LimitReached(name, false, data.min_value);
 			}
@@ -539,6 +546,7 @@ int64_t SequenceCatalogEntry::NextValues(DuckTransaction &transaction, idx_t cou
 				throw SequenceException::LimitReached(name, true, data.max_value);
 			}
 		}
+		counter = data.Successor(result);
 	}
 	auto base = data.counter;
 	data.counter = counter;

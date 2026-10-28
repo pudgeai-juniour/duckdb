@@ -55,6 +55,8 @@ struct SequenceRuns {
 struct SequenceData {
 	explicit SequenceData(CreateSequenceInfo &info);
 
+	int64_t Successor(int64_t value) const;
+
 	//! The amount of times the sequence has been used
 	uint64_t usage_count;
 	//! The sequence counter
