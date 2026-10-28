@@ -300,7 +300,6 @@ protected:
 		switch (wal_type) {
 		case WALType::USE_TABLE:
 		case WALType::INSERT_TUPLE:
-		case WALType::DELETE_TUPLE:
 		case WALType::TRUNCATE_TABLE:
 		case WALType::ADOPT_SEGMENTS:
 		case WALType::DELETE_ROW_POSITIONS:
