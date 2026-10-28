@@ -121,12 +121,18 @@ public:
 	      stream(nullptr, 0), deserializer(stream_p), deserialize_only(deserialize_only) {
 		deserializer.Set<Catalog &>(catalog);
 	}
-	WriteAheadLogDeserializer(ReplayState &state_p, unique_ptr<data_t[]> data_p, idx_t size, idx_t entry_offset_p,
+	WriteAheadLogDeserializer(ReplayState &state_p, std::shared_ptr<data_t> data_p, idx_t size, idx_t entry_offset_p,
 	                          bool deserialize_only = false)
 	    : state(state_p), db(state.db), context(state.context), catalog(state.catalog.get()), data(std::move(data_p)),
 	      stream(data.get(), size), deserializer(stream), deserialize_only(deserialize_only),
 	      entry_offset(entry_offset_p) {
 		deserializer.Set<Catalog &>(catalog);
+	}
+
+	static std::shared_ptr<data_t> AllocateEntry(idx_t size) {
+		static constexpr auto alignment = std::align_val_t {WAL_FROZEN_BITMAP_ALIGNMENT};
+		return std::shared_ptr<data_t>(static_cast<data_t *>(::operator new(MaxValue<idx_t>(size, 1), alignment)),
+		                               [](data_t *entry) { ::operator delete(entry, alignment); });
 	}
 
 	static WriteAheadLogDeserializer GetEntryDeserializer(ReplayState &state_p, BufferedFileReader &stream,
@@ -151,7 +157,7 @@ public:
 			}
 
 			// allocate a buffer and read data into the buffer
-			auto buffer = unique_ptr<data_t[]>(new data_t[size]);
+			auto buffer = AllocateEntry(size);
 			stream.ReadData(buffer.get(), size);
 
 			// compute and verify the checksum
@@ -212,7 +218,7 @@ public:
 
 			//! Allocate a decryption buffer
 			auto buffer = unique_ptr<data_t[]>(new data_t[ciphertext_size]);
-			auto out_buffer = unique_ptr<data_t[]>(new data_t[size]);
+			auto out_buffer = AllocateEntry(size);
 
 			stream.ReadData(buffer.get(), ciphertext_size);
 			encryption_state->Process(buffer.get(), ciphertext_size, buffer.get(), ciphertext_size);
@@ -415,7 +421,7 @@ private:
 	AttachedDatabase &db;
 	ClientContext &context;
 	Catalog &catalog;
-	unique_ptr<data_t[]> data;
+	std::shared_ptr<data_t> data;
 	MemoryStream stream;
 	BinaryDeserializer deserializer;
 	bool deserialize_only;
@@ -2192,8 +2198,11 @@ std::span<const data_t> WriteAheadLogDeserializer::ReadBitmap(const field_id_t s
 	D_ASSERT(data);
 	const auto size = deserializer.ReadProperty<idx_t>(size_field, "size");
 	deserializer.OnPropertyBegin(docs_field, "docs");
-	const auto position = stream.GetPosition();
-	D_ASSERT(size <= stream.GetCapacity() - position);
+	auto position = stream.GetPosition();
+	if (size != 0) {
+		position = AlignValue<idx_t>(position, WAL_FROZEN_BITMAP_ALIGNMENT);
+	}
+	D_ASSERT(position <= stream.GetCapacity() && size <= stream.GetCapacity() - position);
 	stream.SetPosition(position + size);
 	deserializer.OnPropertyEnd();
 	return {stream.GetData() + position, size};
@@ -2215,7 +2224,7 @@ void WriteAheadLogDeserializer::ReplayDeleteRowPositions() {
 		throw DataCorruptionException("Corrupt WAL: row position delete without a log table");
 	}
 	if (state.current_log_table) {
-		state.current_log_table->ReplayDeleteRowPositions(std::move(segments), std::move(docs));
+		state.current_log_table->ReplayDeleteRowPositions(data, std::move(segments), std::move(docs));
 	}
 }
 
@@ -2243,7 +2252,7 @@ void WriteAheadLogDeserializer::ReplayRowPositionMaps() {
 		throw DataCorruptionException("Corrupt WAL: row position maps without a log table");
 	}
 	if (state.current_log_table) {
-		state.current_log_table->ReplayRowPositionMaps(std::move(maps));
+		state.current_log_table->ReplayRowPositionMaps(data, std::move(maps));
 	}
 }
 

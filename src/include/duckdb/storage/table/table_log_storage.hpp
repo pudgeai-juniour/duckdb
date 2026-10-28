@@ -2,12 +2,15 @@
 
 #include "duckdb/common/common.hpp"
 
+#include <memory>
 #include <span>
 
 namespace duckdb {
 
 class ClientContext;
 class DataChunk;
+
+static constexpr idx_t WAL_FROZEN_BITMAP_ALIGNMENT = 32;
 
 struct WALFrozenRowPositionMap {
 	uint64_t source = 0;
@@ -25,8 +28,9 @@ public:
 	virtual void ReplayInsert(ClientContext &context, DataChunk &chunk) = 0;
 	virtual void ReplayTruncate() = 0;
 	virtual void ReplayAdoptSegments(vector<string> segments) = 0;
-	virtual void ReplayDeleteRowPositions(vector<uint64_t> segments, vector<std::span<const data_t>> docs) = 0;
-	virtual void ReplayRowPositionMaps(vector<WALFrozenRowPositionMap> maps) = 0;
+	virtual void ReplayDeleteRowPositions(std::shared_ptr<const data_t> entry, vector<uint64_t> segments,
+	                                      vector<std::span<const data_t>> docs) = 0;
+	virtual void ReplayRowPositionMaps(std::shared_ptr<const data_t> entry, vector<WALFrozenRowPositionMap> maps) = 0;
 };
 
 } // namespace duckdb

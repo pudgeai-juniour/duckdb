@@ -23,6 +23,7 @@
 #include "duckdb/storage/storage_manager.hpp"
 #include "duckdb/storage/table/column_data.hpp"
 #include "duckdb/storage/table/data_table_info.hpp"
+#include "duckdb/storage/table/table_log_storage.hpp"
 #include "duckdb/storage/data_table.hpp"
 #include "duckdb/storage/wal_entry.hpp"
 #include "duckdb/main/attached_database.hpp"
@@ -143,9 +144,12 @@ public:
 		memory_stream.WriteData(buffer, write_size);
 	}
 
-	MemoryStream &Target() {
-		D_ASSERT(direct);
-		return *direct;
+	MemoryStream &Payload() {
+		return direct ? *direct : memory_stream;
+	}
+
+	idx_t PayloadPosition() const {
+		return direct ? direct->GetPosition() - header_offset - 2 * sizeof(uint64_t) : memory_stream.GetPosition();
 	}
 
 	void Flush() {
@@ -301,11 +305,14 @@ public:
 		serializer.WriteProperty(size_field, "size", size);
 		serializer.OnPropertyBegin(docs_field, "docs");
 		if (size != 0) {
-			auto &target = checksum_writer.Target();
-			target.GrowCapacity(size);
-			::roaring::api::roaring_bitmap_frozen_serialize(bitmap,
-			                                                char_ptr_cast(target.GetData() + target.GetPosition()));
-			target.SetPosition(target.GetPosition() + size);
+			auto &payload = checksum_writer.Payload();
+			const auto position = checksum_writer.PayloadPosition();
+			const auto padding = AlignValue<idx_t>(position, WAL_FROZEN_BITMAP_ALIGNMENT) - position;
+			payload.GrowCapacity(padding + size);
+			auto bytes = payload.GetData() + payload.GetPosition();
+			memset(bytes, 0, padding);
+			::roaring::api::roaring_bitmap_frozen_serialize(bitmap, char_ptr_cast(bytes + padding));
+			payload.SetPosition(payload.GetPosition() + padding + size);
 		}
 		serializer.OnPropertyEnd();
 	}
