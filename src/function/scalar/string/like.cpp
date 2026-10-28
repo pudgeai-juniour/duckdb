@@ -719,7 +719,7 @@ struct ILikeLocalState : public FunctionLocalState {
 		return {lowered, has_escape, escape_char, ascii};
 	}
 
-	// reusable scratch buffer for lowercasing each string value (grown on demand)
+	// reusable scratch buffer for the strings that must be lowercased (grown on demand)
 	ILikeBuffer str;
 	ILikeBuffer escaped;
 	ILikeBuffer pattern;
@@ -792,8 +792,8 @@ void ILikeConstantPattern(ILikeLocalState &lstate, const Vector &str_vec, string
 	});
 }
 
-// Execution function for ILIKE / NOT ILIKE ... ESCAPE. Mirrors ILikeFunction: when the pattern and escape are
-// both constant, lowercase the pattern once and reuse a scratch buffer for the per-row string lowercasing.
+// Execution function for ILIKE / NOT ILIKE ... ESCAPE. Mirrors ILikeFunction: when every row has the same pattern
+// and escape, lowercase the pattern once and reuse a scratch buffer for the strings that must be lowercased.
 template <bool INVERT>
 void ILikeEscapeFunction(DataChunk &args, ExpressionState &state, Vector &result) {
 	auto &lstate = ExecuteFunctionState::GetFunctionState(state)->Cast<ILikeLocalState>();
