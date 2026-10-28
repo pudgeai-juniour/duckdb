@@ -864,6 +864,9 @@ static const TransformFrameOps MACRO_PARAMETERS_OPS = {"MacroParameters",
 static const TransformFrameOps MACRO_PARAMETER_OPS = {"MacroParameter",
                                                       &PEGTransformerFactory::InitializeMacroParameterTrampoline,
                                                       &PEGTransformerFactory::FinalizeMacroParameterTrampoline, true};
+static const TransformFrameOps MODE_PARAMETER_OPS = {"ModeParameter",
+                                                     &PEGTransformerFactory::InitializeModeParameterTrampoline,
+                                                     &PEGTransformerFactory::FinalizeModeParameterTrampoline};
 static const TransformFrameOps SIMPLE_PARAMETER_OPS = {"SimpleParameter",
                                                        &PEGTransformerFactory::InitializeSimpleParameterTrampoline,
                                                        &PEGTransformerFactory::FinalizeSimpleParameterTrampoline};
@@ -1898,6 +1901,18 @@ static const TransformFrameOps LIST_COMPREHENSION_FILTER_OPS = {
 static const TransformFrameOps PARENS_EXPRESSION_OPS = {"ParensExpression",
                                                         &PEGTransformerFactory::InitializeParensExpressionTrampoline,
                                                         &PEGTransformerFactory::FinalizeParensExpressionTrampoline};
+static const TransformFrameOps OVERLAPS_TAIL_OPS = {"OverlapsTail",
+                                                    &PEGTransformerFactory::InitializeOverlapsTailTrampoline,
+                                                    &PEGTransformerFactory::FinalizeOverlapsTailTrampoline};
+static const TransformFrameOps OVERLAPS_ROW_OPS = {"OverlapsRow",
+                                                   &PEGTransformerFactory::InitializeOverlapsRowTrampoline,
+                                                   &PEGTransformerFactory::FinalizeOverlapsRowTrampoline, true};
+static const TransformFrameOps OVERLAPS_ROW_EXPRESSION_OPS = {
+    "OverlapsRowExpression", &PEGTransformerFactory::InitializeOverlapsRowExpressionTrampoline,
+    &PEGTransformerFactory::FinalizeOverlapsRowExpressionTrampoline};
+static const TransformFrameOps OVERLAPS_PARENTHESIS_EXPRESSION_OPS = {
+    "OverlapsParenthesisExpression", &PEGTransformerFactory::InitializeOverlapsParenthesisExpressionTrampoline,
+    &PEGTransformerFactory::FinalizeOverlapsParenthesisExpressionTrampoline};
 static const TransformFrameOps MEASURE_SEMANTICS_EXPRESSION_OPS = {
     "MeasureSemanticsExpression", &PEGTransformerFactory::InitializeMeasureSemanticsExpressionTrampoline,
     &PEGTransformerFactory::FinalizeMeasureSemanticsExpressionTrampoline};
@@ -1971,6 +1986,8 @@ static const TransformFrameOps IS_TEST_OPS = {"IsTest", &PEGTransformerFactory::
                                               &PEGTransformerFactory::FinalizeIsTestTrampoline, true};
 static const TransformFrameOps IS_LITERAL_OPS = {"IsLiteral", &PEGTransformerFactory::InitializeIsLiteralTrampoline,
                                                  &PEGTransformerFactory::FinalizeIsLiteralTrampoline};
+static const TransformFrameOps IS_DOCUMENT_OPS = {"IsDocument", &PEGTransformerFactory::InitializeIsDocumentTrampoline,
+                                                  &PEGTransformerFactory::FinalizeIsDocumentTrampoline};
 static const TransformFrameOps IS_LITERAL_VALUE_OPS = {"IsLiteralValue",
                                                        &PEGTransformerFactory::InitializeIsLiteralValueTrampoline,
                                                        &PEGTransformerFactory::FinalizeIsLiteralValueTrampoline, true};
@@ -2118,6 +2135,9 @@ static const TransformFrameOps ANY_ALL_PARSED_OPERATOR_OPS = {
 static const TransformFrameOps NAMED_OTHER_OPERATOR_OPS = {
     "NamedOtherOperator", &PEGTransformerFactory::InitializeNamedOtherOperatorTrampoline,
     &PEGTransformerFactory::FinalizeNamedOtherOperatorTrampoline};
+static const TransformFrameOps QUESTION_MARK_OPERATOR_OPS = {
+    "QuestionMarkOperator", &PEGTransformerFactory::InitializeQuestionMarkOperatorTrampoline,
+    &PEGTransformerFactory::FinalizeQuestionMarkOperatorTrampoline};
 static const TransformFrameOps OPERATOR_LITERAL_OPS = {"OperatorLiteral",
                                                        &PEGTransformerFactory::InitializeOperatorLiteralTrampoline,
                                                        &PEGTransformerFactory::FinalizeOperatorLiteralTrampoline};
@@ -2196,6 +2216,9 @@ static const TransformFrameOps PREFIX_EXPRESSION_OPS = {
 static const TransformFrameOps PREFIX_OPERATOR_OPS = {"PrefixOperator",
                                                       &PEGTransformerFactory::InitializePrefixOperatorTrampoline,
                                                       &PEGTransformerFactory::FinalizePrefixOperatorTrampoline};
+static const TransformFrameOps QUESTION_MARK_PREFIX_OPERATOR_OPS = {
+    "QuestionMarkPrefixOperator", &PEGTransformerFactory::InitializeQuestionMarkPrefixOperatorTrampoline,
+    &PEGTransformerFactory::FinalizeQuestionMarkPrefixOperatorTrampoline};
 static const TransformFrameOps MINUS_PREFIX_OPERATOR_OPS = {
     "MinusPrefixOperator", &PEGTransformerFactory::InitializeMinusPrefixOperatorTrampoline,
     &PEGTransformerFactory::FinalizeMinusPrefixOperatorTrampoline};
@@ -2229,6 +2252,9 @@ static const TransformFrameOps DOT_METHOD_OPERATOR_OPS = {"DotMethodOperator",
 static const TransformFrameOps DOT_COLUMN_OPERATOR_OPS = {"DotColumnOperator",
                                                           &PEGTransformerFactory::InitializeDotColumnOperatorTrampoline,
                                                           &PEGTransformerFactory::FinalizeDotColumnOperatorTrampoline};
+static const TransformFrameOps DOT_STAR_OPERATOR_OPS = {"DotStarOperator",
+                                                        &PEGTransformerFactory::InitializeDotStarOperatorTrampoline,
+                                                        &PEGTransformerFactory::FinalizeDotStarOperatorTrampoline};
 static const TransformFrameOps METHOD_EXPRESSION_OPS = {"MethodExpression",
                                                         &PEGTransformerFactory::InitializeMethodExpressionTrampoline,
                                                         &PEGTransformerFactory::FinalizeMethodExpressionTrampoline};
@@ -2267,6 +2293,9 @@ static const TransformFrameOps SPECIAL_FUNCTION_EXPRESSION_OPS = {
 static const TransformFrameOps COALESCE_EXPRESSION_OPS = {
     "CoalesceExpression", &PEGTransformerFactory::InitializeCoalesceExpressionTrampoline,
     &PEGTransformerFactory::FinalizeCoalesceExpressionTrampoline};
+static const TransformFrameOps XML_CONCAT_EXPRESSION_OPS = {
+    "XmlConcatExpression", &PEGTransformerFactory::InitializeXmlConcatExpressionTrampoline,
+    &PEGTransformerFactory::FinalizeXmlConcatExpressionTrampoline};
 static const TransformFrameOps UNPACK_EXPRESSION_OPS = {"UnpackExpression",
                                                         &PEGTransformerFactory::InitializeUnpackExpressionTrampoline,
                                                         &PEGTransformerFactory::FinalizeUnpackExpressionTrampoline};
@@ -2882,6 +2911,19 @@ static const TransformFrameOps GRANT_STATEMENT_OPS = {"GrantStatement",
 static const TransformFrameOps REVOKE_STATEMENT_OPS = {"RevokeStatement",
                                                        &PEGTransformerFactory::InitializeRevokeStatementTrampoline,
                                                        &PEGTransformerFactory::FinalizeRevokeStatementTrampoline};
+static const TransformFrameOps FUNC_ARG_MODE_OPS = {"FuncArgMode",
+                                                    &PEGTransformerFactory::InitializeFuncArgModeTrampoline,
+                                                    &PEGTransformerFactory::FinalizeFuncArgModeTrampoline};
+static const TransformFrameOps IN_ARG_MODE_OPS = {"InArgMode", &PEGTransformerFactory::InitializeInArgModeTrampoline,
+                                                  &PEGTransformerFactory::FinalizeInArgModeTrampoline};
+static const TransformFrameOps OUT_ARG_MODE_OPS = {"OutArgMode", &PEGTransformerFactory::InitializeOutArgModeTrampoline,
+                                                   &PEGTransformerFactory::FinalizeOutArgModeTrampoline};
+static const TransformFrameOps INOUT_ARG_MODE_OPS = {"InoutArgMode",
+                                                     &PEGTransformerFactory::InitializeInoutArgModeTrampoline,
+                                                     &PEGTransformerFactory::FinalizeInoutArgModeTrampoline};
+static const TransformFrameOps VARIADIC_ARG_MODE_OPS = {"VariadicArgMode",
+                                                        &PEGTransformerFactory::InitializeVariadicArgModeTrampoline,
+                                                        &PEGTransformerFactory::FinalizeVariadicArgModeTrampoline};
 static const TransformFrameOps CREATE_POLICY_STATEMENT_OPS = {
     "CreatePolicyStatement", &PEGTransformerFactory::InitializeCreatePolicyStatementTrampoline,
     &PEGTransformerFactory::FinalizeCreatePolicyStatementTrampoline};
@@ -3927,6 +3969,7 @@ PEGTransformerFactory::GeneratedTransformFrameOps() {
 	    {"MacroDefinitionBody", &MACRO_DEFINITION_BODY_OPS},
 	    {"MacroParameters", &MACRO_PARAMETERS_OPS},
 	    {"MacroParameter", &MACRO_PARAMETER_OPS},
+	    {"ModeParameter", &MODE_PARAMETER_OPS},
 	    {"SimpleParameter", &SIMPLE_PARAMETER_OPS},
 	    {"ScalarMacroDefinition", &SCALAR_MACRO_DEFINITION_OPS},
 	    {"TableMacroDefinition", &TABLE_MACRO_DEFINITION_OPS},
@@ -4286,6 +4329,10 @@ PEGTransformerFactory::GeneratedTransformFrameOps() {
 	    {"ListComprehensionExpression", &LIST_COMPREHENSION_EXPRESSION_OPS},
 	    {"ListComprehensionFilter", &LIST_COMPREHENSION_FILTER_OPS},
 	    {"ParensExpression", &PARENS_EXPRESSION_OPS},
+	    {"OverlapsTail", &OVERLAPS_TAIL_OPS},
+	    {"OverlapsRow", &OVERLAPS_ROW_OPS},
+	    {"OverlapsRowExpression", &OVERLAPS_ROW_EXPRESSION_OPS},
+	    {"OverlapsParenthesisExpression", &OVERLAPS_PARENTHESIS_EXPRESSION_OPS},
 	    {"MeasureSemanticsExpression", &MEASURE_SEMANTICS_EXPRESSION_OPS},
 	    {"SingleExpression", &SINGLE_EXPRESSION_OPS},
 	    {"Expression", &EXPRESSION_OPS},
@@ -4312,6 +4359,7 @@ PEGTransformerFactory::GeneratedTransformFrameOps() {
 	    {"IsOtherOperatorTail", &IS_OTHER_OPERATOR_TAIL_OPS},
 	    {"IsTest", &IS_TEST_OPS},
 	    {"IsLiteral", &IS_LITERAL_OPS},
+	    {"IsDocument", &IS_DOCUMENT_OPS},
 	    {"IsLiteralValue", &IS_LITERAL_VALUE_OPS},
 	    {"UnknownLiteral", &UNKNOWN_LITERAL_OPS},
 	    {"NotNull", &NOT_NULL_OPS},
@@ -4364,6 +4412,7 @@ PEGTransformerFactory::GeneratedTransformFrameOps() {
 	    {"OtherOperator", &OTHER_OPERATOR_OPS},
 	    {"AnyAllParsedOperator", &ANY_ALL_PARSED_OPERATOR_OPS},
 	    {"NamedOtherOperator", &NAMED_OTHER_OPERATOR_OPS},
+	    {"QuestionMarkOperator", &QUESTION_MARK_OPERATOR_OPS},
 	    {"OperatorLiteral", &OPERATOR_LITERAL_OPS},
 	    {"AnyOperatorLiteral", &ANY_OPERATOR_LITERAL_OPS},
 	    {"AnyAllOperator", &ANY_ALL_OPERATOR_OPS},
@@ -4391,6 +4440,7 @@ PEGTransformerFactory::GeneratedTransformFrameOps() {
 	    {"AtTimeZoneExpressionTail", &AT_TIME_ZONE_EXPRESSION_TAIL_OPS},
 	    {"PrefixExpression", &PREFIX_EXPRESSION_OPS},
 	    {"PrefixOperator", &PREFIX_OPERATOR_OPS},
+	    {"QuestionMarkPrefixOperator", &QUESTION_MARK_PREFIX_OPERATOR_OPS},
 	    {"MinusPrefixOperator", &MINUS_PREFIX_OPERATOR_OPS},
 	    {"PlusPrefixOperator", &PLUS_PREFIX_OPERATOR_OPS},
 	    {"TildePrefixOperator", &TILDE_PREFIX_OPERATOR_OPS},
@@ -4402,6 +4452,7 @@ PEGTransformerFactory::GeneratedTransformFrameOps() {
 	    {"DotOperator", &DOT_OPERATOR_OPS},
 	    {"DotMethodOperator", &DOT_METHOD_OPERATOR_OPS},
 	    {"DotColumnOperator", &DOT_COLUMN_OPERATOR_OPS},
+	    {"DotStarOperator", &DOT_STAR_OPERATOR_OPS},
 	    {"MethodExpression", &METHOD_EXPRESSION_OPS},
 	    {"MethodExpressionArguments", &METHOD_EXPRESSION_ARGUMENTS_OPS},
 	    {"MethodExpressionArgumentList", &METHOD_EXPRESSION_ARGUMENT_LIST_OPS},
@@ -4415,6 +4466,7 @@ PEGTransformerFactory::GeneratedTransformFrameOps() {
 	    {"PostfixOperator", &POSTFIX_OPERATOR_OPS},
 	    {"SpecialFunctionExpression", &SPECIAL_FUNCTION_EXPRESSION_OPS},
 	    {"CoalesceExpression", &COALESCE_EXPRESSION_OPS},
+	    {"XmlConcatExpression", &XML_CONCAT_EXPRESSION_OPS},
 	    {"UnpackExpression", &UNPACK_EXPRESSION_OPS},
 	    {"TryExpression", &TRY_EXPRESSION_OPS},
 	    {"ColumnsExpression", &COLUMNS_EXPRESSION_OPS},
@@ -4627,6 +4679,11 @@ PEGTransformerFactory::GeneratedTransformFrameOps() {
 	    {"AlterDefaultPrivilegesStatement", &ALTER_DEFAULT_PRIVILEGES_STATEMENT_OPS},
 	    {"GrantStatement", &GRANT_STATEMENT_OPS},
 	    {"RevokeStatement", &REVOKE_STATEMENT_OPS},
+	    {"FuncArgMode", &FUNC_ARG_MODE_OPS},
+	    {"InArgMode", &IN_ARG_MODE_OPS},
+	    {"OutArgMode", &OUT_ARG_MODE_OPS},
+	    {"InoutArgMode", &INOUT_ARG_MODE_OPS},
+	    {"VariadicArgMode", &VARIADIC_ARG_MODE_OPS},
 	    {"CreatePolicyStatement", &CREATE_POLICY_STATEMENT_OPS},
 	    {"AlterPolicyStatement", &ALTER_POLICY_STATEMENT_OPS},
 	    {"DropPolicyStatement", &DROP_POLICY_STATEMENT_OPS},
@@ -10581,6 +10638,31 @@ PEGTransformerFactory::FinalizeMacroParameterTrampoline(PEGTransformer &transfor
 	return transformer.MakeResult<MacroParameter>(std::move(result));
 }
 
+void PEGTransformerFactory::InitializeModeParameterTrampoline(PEGTransformer &transformer,
+                                                              GeneratedTransformProcess &process) {
+	auto &list_pr = process.parse_result.Cast<ListParseResult>();
+	process.ReserveChildSlots(3);
+	auto &type_opt = list_pr.GetChild(2).Cast<OptionalParseResult>();
+	if (type_opt.HasResult()) {
+		process.PushChild({type_opt.GetResult()}, 2);
+	}
+	process.PushChild({list_pr.GetChild(1)}, 1);
+	process.PushChild({list_pr.GetChild(0)}, 0);
+}
+
+arena_ptr<TransformResultValue>
+PEGTransformerFactory::FinalizeModeParameterTrampoline(PEGTransformer &transformer,
+                                                       GeneratedTransformProcess &process) {
+	auto func_arg_mode = process.TakeResult<char>(0);
+	auto type_func_name = process.TakeResult<Identifier>(1);
+	optional<LogicalType> type {};
+	if (process.child_results[2]) {
+		type = process.TakeResult<LogicalType>(2);
+	}
+	auto result = TransformModeParameter(transformer, std::move(func_arg_mode), type_func_name, type);
+	return transformer.MakeResult<MacroParameter>(std::move(result));
+}
+
 void PEGTransformerFactory::InitializeSimpleParameterTrampoline(PEGTransformer &transformer,
                                                                 GeneratedTransformProcess &process) {
 	auto &list_pr = process.parse_result.Cast<ListParseResult>();
@@ -15939,13 +16021,21 @@ void PEGTransformerFactory::InitializeParenthesisExpressionTrampoline(PEGTransfo
 	if (list_opt.HasResult()) {
 		auto list_items = ExtractParseResultsFromList(list_opt.GetResult());
 		dynamic_child_count = list_items.size();
-		process.ReserveChildSlots(1 + dynamic_child_count - 1);
+		process.ReserveChildSlots(2 + dynamic_child_count - 1);
+		auto &overlaps_tail_opt = list_pr.GetChild(1).Cast<OptionalParseResult>();
+		if (overlaps_tail_opt.HasResult()) {
+			process.PushChild({overlaps_tail_opt.GetResult()}, 1 + dynamic_child_count - 1);
+		}
 		for (idx_t i = list_items.size(); i > 0; i--) {
 			auto child_idx = i - 1;
 			process.PushChild({list_items[child_idx].get()}, 0 + child_idx);
 		}
 	} else {
-		process.ReserveChildSlots(1 - 1);
+		process.ReserveChildSlots(2 - 1);
+		auto &overlaps_tail_opt = list_pr.GetChild(1).Cast<OptionalParseResult>();
+		if (overlaps_tail_opt.HasResult()) {
+			process.PushChild({overlaps_tail_opt.GetResult()}, 1 + dynamic_child_count - 1);
+		}
 	}
 }
 
@@ -15968,7 +16058,11 @@ PEGTransformerFactory::FinalizeParenthesisExpressionTrampoline(PEGTransformer &t
 		}
 		expression = std::move(expression_value);
 	}
-	auto result = TransformParenthesisExpression(transformer, std::move(expression));
+	optional<unique_ptr<ParsedExpression>> overlaps_tail {};
+	if (process.child_results[1 + dynamic_child_count - 1]) {
+		overlaps_tail = process.TakeResult<unique_ptr<ParsedExpression>>(1 + dynamic_child_count - 1);
+	}
+	auto result = TransformParenthesisExpression(transformer, std::move(expression), std::move(overlaps_tail));
 	return transformer.MakeResult<unique_ptr<ParsedExpression>>(std::move(result));
 }
 
@@ -17732,6 +17826,122 @@ PEGTransformerFactory::FinalizeParensExpressionTrampoline(PEGTransformer &transf
 	return transformer.MakeResult<unique_ptr<ParsedExpression>>(std::move(result));
 }
 
+void PEGTransformerFactory::InitializeOverlapsTailTrampoline(PEGTransformer &transformer,
+                                                             GeneratedTransformProcess &process) {
+	auto &list_pr = process.parse_result.Cast<ListParseResult>();
+	process.ReserveChildSlots(1);
+	process.PushChild({list_pr.GetChild(1)}, 0);
+}
+
+arena_ptr<TransformResultValue>
+PEGTransformerFactory::FinalizeOverlapsTailTrampoline(PEGTransformer &transformer, GeneratedTransformProcess &process) {
+	auto overlaps_row = process.TakeResult<unique_ptr<ParsedExpression>>(0);
+	auto result = TransformOverlapsTail(transformer, std::move(overlaps_row));
+	return transformer.MakeResult<unique_ptr<ParsedExpression>>(std::move(result));
+}
+
+void PEGTransformerFactory::InitializeOverlapsRowTrampoline(PEGTransformer &transformer,
+                                                            GeneratedTransformProcess &process) {
+	auto &list_pr = process.parse_result.Cast<ListParseResult>();
+	auto &choice_pr = list_pr.Child<ChoiceParseResult>(0);
+	auto &choice_result = choice_pr.GetResult();
+	process.ReserveChildSlots(1);
+	auto child_rule = choice_result.GetRule();
+	auto has_transform_process = child_rule && child_rule->transform_process;
+	if (!has_transform_process) {
+		throw InternalException("No transform process registered for rule '%s'", choice_result.Name());
+	}
+	process.PushChild({*child_rule, choice_result}, 0);
+}
+
+arena_ptr<TransformResultValue>
+PEGTransformerFactory::FinalizeOverlapsRowTrampoline(PEGTransformer &transformer, GeneratedTransformProcess &process) {
+	auto result = process.TakeResult<unique_ptr<ParsedExpression>>(0);
+	return transformer.MakeResult<unique_ptr<ParsedExpression>>(std::move(result));
+}
+
+void PEGTransformerFactory::InitializeOverlapsRowExpressionTrampoline(PEGTransformer &transformer,
+                                                                      GeneratedTransformProcess &process) {
+	auto &list_pr = process.parse_result.Cast<ListParseResult>();
+	auto &list_opt = ExtractResultFromParens(list_pr.GetChild(1)).Cast<OptionalParseResult>();
+	idx_t dynamic_child_count = 0;
+	if (list_opt.HasResult()) {
+		auto list_items = ExtractParseResultsFromList(list_opt.GetResult());
+		dynamic_child_count = list_items.size();
+		process.ReserveChildSlots(1 + dynamic_child_count - 1);
+		for (idx_t i = list_items.size(); i > 0; i--) {
+			auto child_idx = i - 1;
+			process.PushChild({list_items[child_idx].get()}, 0 + child_idx);
+		}
+	} else {
+		process.ReserveChildSlots(1 - 1);
+	}
+}
+
+arena_ptr<TransformResultValue>
+PEGTransformerFactory::FinalizeOverlapsRowExpressionTrampoline(PEGTransformer &transformer,
+                                                               GeneratedTransformProcess &process) {
+	auto &list_pr = process.parse_result.Cast<ListParseResult>();
+	idx_t dynamic_child_count = 0;
+	auto &dynamic_list_opt = ExtractResultFromParens(list_pr.GetChild(1)).Cast<OptionalParseResult>();
+	if (dynamic_list_opt.HasResult()) {
+		auto dynamic_list_items = ExtractParseResultsFromList(dynamic_list_opt.GetResult());
+		dynamic_child_count = dynamic_list_items.size();
+	}
+	optional<vector<unique_ptr<ParsedExpression>>> expression {};
+	auto &expression_opt = ExtractResultFromParens(list_pr.GetChild(1)).Cast<OptionalParseResult>();
+	if (expression_opt.HasResult()) {
+		vector<unique_ptr<ParsedExpression>> expression_value;
+		for (idx_t i = 0; i < 0 + dynamic_child_count; i++) {
+			expression_value.push_back(process.TakeResult<unique_ptr<ParsedExpression>>(i));
+		}
+		expression = std::move(expression_value);
+	}
+	auto result = TransformOverlapsRowExpression(transformer, std::move(expression));
+	return transformer.MakeResult<unique_ptr<ParsedExpression>>(std::move(result));
+}
+
+void PEGTransformerFactory::InitializeOverlapsParenthesisExpressionTrampoline(PEGTransformer &transformer,
+                                                                              GeneratedTransformProcess &process) {
+	auto &list_pr = process.parse_result.Cast<ListParseResult>();
+	auto &list_opt = ExtractResultFromParens(list_pr.GetChild(0)).Cast<OptionalParseResult>();
+	idx_t dynamic_child_count = 0;
+	if (list_opt.HasResult()) {
+		auto list_items = ExtractParseResultsFromList(list_opt.GetResult());
+		dynamic_child_count = list_items.size();
+		process.ReserveChildSlots(1 + dynamic_child_count - 1);
+		for (idx_t i = list_items.size(); i > 0; i--) {
+			auto child_idx = i - 1;
+			process.PushChild({list_items[child_idx].get()}, 0 + child_idx);
+		}
+	} else {
+		process.ReserveChildSlots(1 - 1);
+	}
+}
+
+arena_ptr<TransformResultValue>
+PEGTransformerFactory::FinalizeOverlapsParenthesisExpressionTrampoline(PEGTransformer &transformer,
+                                                                       GeneratedTransformProcess &process) {
+	auto &list_pr = process.parse_result.Cast<ListParseResult>();
+	idx_t dynamic_child_count = 0;
+	auto &dynamic_list_opt = ExtractResultFromParens(list_pr.GetChild(0)).Cast<OptionalParseResult>();
+	if (dynamic_list_opt.HasResult()) {
+		auto dynamic_list_items = ExtractParseResultsFromList(dynamic_list_opt.GetResult());
+		dynamic_child_count = dynamic_list_items.size();
+	}
+	optional<vector<unique_ptr<ParsedExpression>>> expression {};
+	auto &expression_opt = ExtractResultFromParens(list_pr.GetChild(0)).Cast<OptionalParseResult>();
+	if (expression_opt.HasResult()) {
+		vector<unique_ptr<ParsedExpression>> expression_value;
+		for (idx_t i = 0; i < 0 + dynamic_child_count; i++) {
+			expression_value.push_back(process.TakeResult<unique_ptr<ParsedExpression>>(i));
+		}
+		expression = std::move(expression_value);
+	}
+	auto result = TransformOverlapsParenthesisExpression(transformer, std::move(expression));
+	return transformer.MakeResult<unique_ptr<ParsedExpression>>(std::move(result));
+}
+
 void PEGTransformerFactory::InitializeMeasureSemanticsExpressionTrampoline(PEGTransformer &transformer,
                                                                            GeneratedTransformProcess &process) {
 	auto &list_pr = process.parse_result.Cast<ListParseResult>();
@@ -18341,6 +18551,21 @@ arena_ptr<TransformResultValue> PEGTransformerFactory::FinalizeIsLiteralTrampoli
 	has_result = has_result_opt.HasResult();
 	auto is_literal_value = process.TakeResult<Value>(0);
 	auto result = TransformIsLiteral(transformer, has_result, is_literal_value);
+	return transformer.MakeResult<unique_ptr<ParsedExpression>>(std::move(result));
+}
+
+void PEGTransformerFactory::InitializeIsDocumentTrampoline(PEGTransformer &transformer,
+                                                           GeneratedTransformProcess &process) {
+	process.ReserveChildSlots(0);
+}
+
+arena_ptr<TransformResultValue>
+PEGTransformerFactory::FinalizeIsDocumentTrampoline(PEGTransformer &transformer, GeneratedTransformProcess &process) {
+	auto &list_pr = process.parse_result.Cast<ListParseResult>();
+	bool has_result {};
+	auto &has_result_opt = list_pr.GetChild(1).Cast<OptionalParseResult>();
+	has_result = has_result_opt.HasResult();
+	auto result = TransformIsDocument(transformer, has_result);
 	return transformer.MakeResult<unique_ptr<ParsedExpression>>(std::move(result));
 }
 
@@ -19342,6 +19567,20 @@ PEGTransformerFactory::FinalizeNamedOtherOperatorTrampoline(PEGTransformer &tran
 	return transformer.MakeResult<ParsedOperator>(std::move(result));
 }
 
+void PEGTransformerFactory::InitializeQuestionMarkOperatorTrampoline(PEGTransformer &transformer,
+                                                                     GeneratedTransformProcess &process) {
+	process.ReserveChildSlots(0);
+}
+
+arena_ptr<TransformResultValue>
+PEGTransformerFactory::FinalizeQuestionMarkOperatorTrampoline(PEGTransformer &transformer,
+                                                              GeneratedTransformProcess &process) {
+	auto &list_pr = process.parse_result.Cast<ListParseResult>();
+	auto any_operator_literal = string(list_pr.GetChild(1).Cast<OperatorParseResult>().operator_token);
+	auto result = TransformQuestionMarkOperator(transformer, any_operator_literal);
+	return transformer.MakeResult<string>(result);
+}
+
 void PEGTransformerFactory::InitializeOperatorLiteralTrampoline(PEGTransformer &transformer,
                                                                 GeneratedTransformProcess &process) {
 	process.ReserveChildSlots(0);
@@ -19991,6 +20230,18 @@ PEGTransformerFactory::FinalizePrefixOperatorTrampoline(PEGTransformer &transfor
 	return transformer.MakeResult<string>(result);
 }
 
+void PEGTransformerFactory::InitializeQuestionMarkPrefixOperatorTrampoline(PEGTransformer &transformer,
+                                                                           GeneratedTransformProcess &process) {
+	process.ReserveChildSlots(0);
+}
+
+arena_ptr<TransformResultValue>
+PEGTransformerFactory::FinalizeQuestionMarkPrefixOperatorTrampoline(PEGTransformer &transformer,
+                                                                    GeneratedTransformProcess &process) {
+	auto result = TransformQuestionMarkPrefixOperator(transformer);
+	return transformer.MakeResult<string>(result);
+}
+
 void PEGTransformerFactory::InitializeMinusPrefixOperatorTrampoline(PEGTransformer &transformer,
                                                                     GeneratedTransformProcess &process) {
 	process.ReserveChildSlots(0);
@@ -20171,6 +20422,18 @@ PEGTransformerFactory::FinalizeDotColumnOperatorTrampoline(PEGTransformer &trans
                                                            GeneratedTransformProcess &process) {
 	auto col_label = process.TakeResult<string>(0);
 	auto result = TransformDotColumnOperator(transformer, col_label);
+	return transformer.MakeResult<unique_ptr<ParsedExpression>>(std::move(result));
+}
+
+void PEGTransformerFactory::InitializeDotStarOperatorTrampoline(PEGTransformer &transformer,
+                                                                GeneratedTransformProcess &process) {
+	process.ReserveChildSlots(0);
+}
+
+arena_ptr<TransformResultValue>
+PEGTransformerFactory::FinalizeDotStarOperatorTrampoline(PEGTransformer &transformer,
+                                                         GeneratedTransformProcess &process) {
+	auto result = TransformDotStarOperator(transformer);
 	return transformer.MakeResult<unique_ptr<ParsedExpression>>(std::move(result));
 }
 
@@ -20465,6 +20728,32 @@ PEGTransformerFactory::FinalizeCoalesceExpressionTrampoline(PEGTransformer &tran
 	return transformer.MakeResult<unique_ptr<ParsedExpression>>(std::move(result));
 }
 
+void PEGTransformerFactory::InitializeXmlConcatExpressionTrampoline(PEGTransformer &transformer,
+                                                                    GeneratedTransformProcess &process) {
+	auto &list_pr = process.parse_result.Cast<ListParseResult>();
+	auto list_items = ExtractParseResultsFromList(ExtractResultFromParens(list_pr.GetChild(1)));
+	auto dynamic_child_count = list_items.size();
+	process.ReserveChildSlots(1 + dynamic_child_count - 1);
+	for (idx_t i = list_items.size(); i > 0; i--) {
+		auto child_idx = i - 1;
+		process.PushChild({list_items[child_idx].get()}, 0 + child_idx);
+	}
+}
+
+arena_ptr<TransformResultValue>
+PEGTransformerFactory::FinalizeXmlConcatExpressionTrampoline(PEGTransformer &transformer,
+                                                             GeneratedTransformProcess &process) {
+	auto &list_pr = process.parse_result.Cast<ListParseResult>();
+	auto dynamic_list_items = ExtractParseResultsFromList(ExtractResultFromParens(list_pr.GetChild(1)));
+	auto dynamic_child_count = dynamic_list_items.size();
+	vector<unique_ptr<ParsedExpression>> expression;
+	for (idx_t i = 0; i < 0 + dynamic_child_count; i++) {
+		expression.push_back(process.TakeResult<unique_ptr<ParsedExpression>>(i));
+	}
+	auto result = TransformXmlConcatExpression(transformer, std::move(expression));
+	return transformer.MakeResult<unique_ptr<ParsedExpression>>(std::move(result));
+}
+
 void PEGTransformerFactory::InitializeUnpackExpressionTrampoline(PEGTransformer &transformer,
                                                                  GeneratedTransformProcess &process) {
 	auto &list_pr = process.parse_result.Cast<ListParseResult>();
@@ -20646,13 +20935,21 @@ void PEGTransformerFactory::InitializeRowExpressionTrampoline(PEGTransformer &tr
 	if (list_opt.HasResult()) {
 		auto list_items = ExtractParseResultsFromList(list_opt.GetResult());
 		dynamic_child_count = list_items.size();
-		process.ReserveChildSlots(1 + dynamic_child_count - 1);
+		process.ReserveChildSlots(2 + dynamic_child_count - 1);
+		auto &overlaps_tail_opt = list_pr.GetChild(2).Cast<OptionalParseResult>();
+		if (overlaps_tail_opt.HasResult()) {
+			process.PushChild({overlaps_tail_opt.GetResult()}, 1 + dynamic_child_count - 1);
+		}
 		for (idx_t i = list_items.size(); i > 0; i--) {
 			auto child_idx = i - 1;
 			process.PushChild({list_items[child_idx].get()}, 0 + child_idx);
 		}
 	} else {
-		process.ReserveChildSlots(1 - 1);
+		process.ReserveChildSlots(2 - 1);
+		auto &overlaps_tail_opt = list_pr.GetChild(2).Cast<OptionalParseResult>();
+		if (overlaps_tail_opt.HasResult()) {
+			process.PushChild({overlaps_tail_opt.GetResult()}, 1 + dynamic_child_count - 1);
+		}
 	}
 }
 
@@ -20675,7 +20972,11 @@ PEGTransformerFactory::FinalizeRowExpressionTrampoline(PEGTransformer &transform
 		}
 		expression = std::move(expression_value);
 	}
-	auto result = TransformRowExpression(transformer, std::move(expression));
+	optional<unique_ptr<ParsedExpression>> overlaps_tail {};
+	if (process.child_results[1 + dynamic_child_count - 1]) {
+		overlaps_tail = process.TakeResult<unique_ptr<ParsedExpression>>(1 + dynamic_child_count - 1);
+	}
+	auto result = TransformRowExpression(transformer, std::move(expression), std::move(overlaps_tail));
 	return transformer.MakeResult<unique_ptr<ParsedExpression>>(std::move(result));
 }
 
@@ -24403,6 +24704,71 @@ PEGTransformerFactory::FinalizeRevokeStatementTrampoline(PEGTransformer &transfo
                                                          GeneratedTransformProcess &process) {
 	auto result = TransformRevokeStatement(transformer, process.parse_result);
 	return transformer.MakeResult<unique_ptr<SQLStatement>>(std::move(result));
+}
+
+void PEGTransformerFactory::InitializeFuncArgModeTrampoline(PEGTransformer &transformer,
+                                                            GeneratedTransformProcess &process) {
+	auto &list_pr = process.parse_result.Cast<ListParseResult>();
+	auto &choice_pr = list_pr.Child<ChoiceParseResult>(0);
+	auto &choice_result = choice_pr.GetResult();
+	process.ReserveChildSlots(1);
+	auto child_rule = choice_result.GetRule();
+	auto has_transform_process = child_rule && child_rule->transform_process;
+	if (!has_transform_process) {
+		throw InternalException("No transform process registered for rule '%s'", choice_result.Name());
+	}
+	process.PushChild({*child_rule, choice_result}, 0);
+}
+
+arena_ptr<TransformResultValue>
+PEGTransformerFactory::FinalizeFuncArgModeTrampoline(PEGTransformer &transformer, GeneratedTransformProcess &process) {
+	auto result = process.TakeResult<char>(0);
+	return transformer.MakeResult<char>(std::move(result));
+}
+
+void PEGTransformerFactory::InitializeInArgModeTrampoline(PEGTransformer &transformer,
+                                                          GeneratedTransformProcess &process) {
+	process.ReserveChildSlots(0);
+}
+
+arena_ptr<TransformResultValue> PEGTransformerFactory::FinalizeInArgModeTrampoline(PEGTransformer &transformer,
+                                                                                   GeneratedTransformProcess &process) {
+	auto result = TransformInArgMode(transformer);
+	return transformer.MakeResult<char>(std::move(result));
+}
+
+void PEGTransformerFactory::InitializeOutArgModeTrampoline(PEGTransformer &transformer,
+                                                           GeneratedTransformProcess &process) {
+	process.ReserveChildSlots(0);
+}
+
+arena_ptr<TransformResultValue>
+PEGTransformerFactory::FinalizeOutArgModeTrampoline(PEGTransformer &transformer, GeneratedTransformProcess &process) {
+	auto result = TransformOutArgMode(transformer);
+	return transformer.MakeResult<char>(std::move(result));
+}
+
+void PEGTransformerFactory::InitializeInoutArgModeTrampoline(PEGTransformer &transformer,
+                                                             GeneratedTransformProcess &process) {
+	process.ReserveChildSlots(0);
+}
+
+arena_ptr<TransformResultValue>
+PEGTransformerFactory::FinalizeInoutArgModeTrampoline(PEGTransformer &transformer, GeneratedTransformProcess &process) {
+	auto result = TransformInoutArgMode(transformer);
+	return transformer.MakeResult<char>(std::move(result));
+}
+
+void PEGTransformerFactory::InitializeVariadicArgModeTrampoline(PEGTransformer &transformer,
+                                                                GeneratedTransformProcess &process) {
+	process.ReserveChildSlots(0);
+}
+
+arena_ptr<TransformResultValue>
+PEGTransformerFactory::FinalizeVariadicArgModeTrampoline(PEGTransformer &transformer,
+                                                         GeneratedTransformProcess &process) {
+	auto result = TransformVariadicArgMode(transformer);
+	return transformer.MakeResult<char>(std::move(result));
 }
 
 void PEGTransformerFactory::InitializeCreatePolicyStatementTrampoline(PEGTransformer &transformer,

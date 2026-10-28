@@ -1026,7 +1026,8 @@ ReturnMacroBody <- 'RETURN' Expression
 MacroDefinitionBody <- TableMacroDefinition / ScalarMacroDefinition
 
 MacroParameters <- List(MacroParameter)
-MacroParameter <- NamedParameter / SimpleParameter
+MacroParameter <- NamedParameter / ModeParameter / SimpleParameter
+ModeParameter <- FuncArgMode TypeFuncName Type?
 SimpleParameter <- TypeFuncName Type?
 
 ScalarMacroDefinition <- Expression
@@ -1458,7 +1459,7 @@ IgnoreOrRespectNulls <- IgnoreNulls / RespectNulls
 IgnoreNulls <- 'IGNORE' 'NULLS'
 RespectNulls <- 'RESPECT' 'NULLS'
 
-ParenthesisExpression <- Parens(List(Expression)?)
+ParenthesisExpression <- Parens(List(Expression)?) OverlapsTail?
 LiteralExpression <- StringLiteral / NumberLiteral / ConstantLiteral
 ConstantLiteral <- NullLiteral / TrueLiteral / FalseLiteral
 NullLiteral <- 'NULL'
@@ -1559,6 +1560,11 @@ ListComprehensionFilter <- 'IF' Expression
 
 ParensExpression <- Parens(Expression)
 
+OverlapsTail <- 'OVERLAPS' OverlapsRow
+OverlapsRow <- OverlapsRowExpression / OverlapsParenthesisExpression
+OverlapsRowExpression <- 'ROW' Parens(List(Expression)?)
+OverlapsParenthesisExpression <- Parens(List(Expression)?)
+
 # RUNNING and FINAL say how much of a MATCH_RECOGNIZE match the call below them reads. They are only
 # meaningful in MEASURES, which is where the binder checks for them.
 MeasureSemanticsExpression <- MeasureSemantics FunctionExpression
@@ -1613,8 +1619,9 @@ IsTestTail <- IsTest
 IsDistinctTail <- IsDistinctFromTail
 IsComparisonTail <- ComparisonExpressionTail
 IsOtherOperatorTail <- OtherOperatorTail
-IsTest <- IsLiteral / NotNull / IsNull
+IsTest <- IsLiteral / IsDocument / NotNull / IsNull
 IsLiteral <- 'IS' 'NOT'? IsLiteralValue
+IsDocument <- 'IS' 'NOT'? 'DOCUMENT'
 IsLiteralValue <- TrueLiteral / FalseLiteral / NullLiteral / UnknownLiteral
 UnknownLiteral <- 'UNKNOWN'
 NotNull <- NotNullKeyword / NotNullOperator
@@ -1681,7 +1688,8 @@ OtherOperator <-
     AnyAllParsedOperator / NamedOtherOperator
 AnyAllParsedOperator <- AnyAllOperator
 NamedOtherOperator <-
-    QualifiedOperator / OperatorLiteral
+    QualifiedOperator / OperatorLiteral / QuestionMarkOperator
+QuestionMarkOperator <- '?' AnyOperatorLiteral
 OperatorLiteral <- Identifier
 AnyOperatorLiteral <- Identifier
 AnyAllOperator <- AnyOperatorLiteral AnyOrAll
@@ -1718,7 +1726,8 @@ AtTimeZoneExpressionTail <- AtTimeZoneOperator PrefixExpression
 AtTimeZoneOperator <- 'AT' 'TIME' 'ZONE'
 # LEVEL 15
 PrefixExpression <- PrefixOperator* BaseExpression
-PrefixOperator <- QualifiedOperator / MinusPrefixOperator / PlusPrefixOperator / DoubleNotPrefixOperator
+PrefixOperator <- QualifiedOperator / MinusPrefixOperator / PlusPrefixOperator / DoubleNotPrefixOperator / QuestionMarkPrefixOperator
+QuestionMarkPrefixOperator <- '?' '|'
 MinusPrefixOperator <- '-'
 PlusPrefixOperator <- '+'
 TildePrefixOperator <- '~'
@@ -1729,9 +1738,10 @@ IndirectionList <- Indirection+
 
 Indirection <- CastOperator / DotOperator / SliceExpression / PostfixOperator
 CastOperator <- '::' Type
-DotOperator <- DotMethodOperator / DotColumnOperator
+DotOperator <- DotMethodOperator / DotColumnOperator / DotStarOperator
 DotMethodOperator <- '.' MethodExpression
 DotColumnOperator <- '.' ColLabel
+DotStarOperator <- '.' '*'
 MethodExpression <- ColLabel MethodExpressionArguments
 MethodExpressionArguments <- Parens(MethodExpressionArgumentList)
 MethodExpressionArgumentList <- DistinctOrAll? MethodFunctionArguments? OrderByClause? IgnoreOrRespectNulls?
@@ -1745,8 +1755,9 @@ StepSliceBound <- ':' Expression?
 PostfixOperator <- '!'
 
 
-SpecialFunctionExpression <- CoalesceExpression / UnpackExpression / TryExpression / ColumnsExpression / ExtractExpression / LambdaExpression / NullIfExpression / PositionExpression / RowExpression / SubstringSimilarExpression / SubstringExpression / TrimExpression / OverlayExpression
+SpecialFunctionExpression <- CoalesceExpression / UnpackExpression / TryExpression / ColumnsExpression / ExtractExpression / LambdaExpression / NullIfExpression / PositionExpression / RowExpression / SubstringSimilarExpression / SubstringExpression / TrimExpression / OverlayExpression / XmlConcatExpression
 CoalesceExpression <- 'COALESCE' Parens(List(Expression))
+XmlConcatExpression <- 'XMLCONCAT' Parens(List(Expression))
 UnpackExpression <- 'UNPACK' Parens(Expression)
 TryExpression <- 'TRY' Parens(Expression)
 ColumnsExpression <- StarSymbol? 'COLUMNS' Parens(Expression)
@@ -1757,7 +1768,7 @@ NullIfExpression <- 'NULLIF' Parens(NullIfArguments)
 NullIfArguments <- Expression ',' Expression
 PositionExpression <- 'POSITION' Parens(PositionArguments)
 PositionArguments <- OtherOperatorExpression 'IN' Expression
-RowExpression <- 'ROW' Parens(List(Expression)?)
+RowExpression <- 'ROW' Parens(List(Expression)?) OverlapsTail?
 SubstringExpression <- 'SUBSTRING' Parens(SubstringArguments)
 SubstringArguments <- SubstringParameters / SubstringExpressionList
 SubstringExpressionList <- List(Expression)
@@ -2101,7 +2112,11 @@ GrantFunctionTarget <- GrantRoutineKind QualifiedName FuncArgSignature?
 GrantRoutineKind <- 'FUNCTION' / 'ROUTINE' / 'PROCEDURE'
 FuncArgSignature <- Parens(List(FuncArg)?)
 FuncArg <- (FuncArgMode? ColId Type) / (FuncArgMode? Type)
-FuncArgMode <- 'IN' / 'OUT' / 'INOUT' / 'VARIADIC'
+FuncArgMode <- InArgMode / OutArgMode / InoutArgMode / VariadicArgMode
+InArgMode <- 'IN'
+OutArgMode <- 'OUT'
+InoutArgMode <- 'INOUT'
+VariadicArgMode <- 'VARIADIC'
 GrantNamedTarget <- GrantObjType? QualifiedName
 
 # Optional WITH GRANT OPTION suffix on a table GRANT: the grantee may re-grant.
