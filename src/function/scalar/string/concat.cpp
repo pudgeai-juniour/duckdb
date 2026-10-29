@@ -236,13 +236,13 @@ void ListConcatFunction(DataChunk &args, ExpressionState &state, Vector &result,
 		input_data.emplace_back(input, count);
 	}
 
-	// the || operator yields NULL whenever any input is NULL, while list_concat skips NULLs
-	vector<bool> row_invalid(count, false);
+	// the || operator yields NULL when every input is NULL, while list_concat skips NULLs
+	vector<bool> row_invalid(count, is_operator);
 	if (is_operator) {
 		for (auto &input : input_data) {
 			for (idx_t r = 0; r < count; r++) {
-				if (!input.list_data[r].IsValid()) {
-					row_invalid[r] = true;
+				if (input.list_data[r].IsValid()) {
+					row_invalid[r] = false;
 				}
 			}
 		}
@@ -484,6 +484,7 @@ ScalarFunction ConcatOperatorFun::GetFunction() {
 	    .AddParameter("arg1", LogicalType::ANY)
 	    .AddParameter("arg2", LogicalType::ANY)
 	    .AddArgs("args", LogicalType::ANY);
+	concat_op.SetNullHandling(FunctionNullHandling::SPECIAL_HANDLING);
 	return concat_op;
 }
 

@@ -256,17 +256,17 @@ SELECT array_push_front(NULL, 1);
 query T
 SELECT [1, 2] || NULL
 ----
-NULL
+[1, 2]
 
 query T
 SELECT [1, 2] || b FROM (VALUES (NULL::INT[])) t(b)
 ----
-NULL
+[1, 2]
 
 query T
 SELECT a || b FROM (VALUES ([1,2,3], NULL::INT[])) t(a,b)
 ----
-NULL
+[1, 2, 3]
 
 # type mismatch
 statement error
