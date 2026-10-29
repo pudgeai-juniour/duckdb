@@ -91,11 +91,11 @@ idx_t WriteAheadLog::GetTotalWritten() const {
 	return writer->GetTotalWritten();
 }
 
-idx_t WriteAheadLog::GetFlushedOffset() {
+idx_t WriteAheadLog::GetFlushedOffset() const {
 	return requested_sync_offset.load(std::memory_order_acquire);
 }
 
-idx_t WriteAheadLog::GetDurableOffset() {
+idx_t WriteAheadLog::GetDurableOffset() const {
 	return durable_offset.load(std::memory_order_acquire);
 }
 
