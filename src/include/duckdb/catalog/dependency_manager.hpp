@@ -89,7 +89,7 @@ class DependencyManager {
 	friend class CatalogSet;
 
 public:
-	explicit DependencyManager(DuckCatalog &catalog);
+	DependencyManager(DuckCatalog &catalog, bool case_sensitive);
 
 	//! Scans all dependencies, returning pairs of (object, dependent)
 	void Scan(ClientContext &context,

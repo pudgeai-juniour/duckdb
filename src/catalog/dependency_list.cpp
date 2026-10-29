@@ -24,16 +24,17 @@ uint64_t LogicalDependencyHashFunction::operator()(const LogicalDependency &a) c
 }
 
 bool LogicalDependencyEquality::operator()(const LogicalDependency &a, const LogicalDependency &b) const {
+	IdentifierEquality same(true);
 	if (a.entry.type != b.entry.type) {
 		return false;
 	}
-	if (a.entry.name != b.entry.name) {
+	if (!same(a.entry.name, b.entry.name)) {
 		return false;
 	}
-	if (a.entry.schema_path != b.entry.schema_path) {
+	if (!CatalogEntryInfo::SamePath(a.entry.schema_path, b.entry.schema_path)) {
 		return false;
 	}
-	if (a.catalog != b.catalog) {
+	if (!same(a.catalog, b.catalog)) {
 		return false;
 	}
 	return true;
@@ -67,11 +68,6 @@ LogicalDependency::LogicalDependency(optional_ptr<Catalog> catalog_p, CatalogEnt
 bool LogicalDependency::Refers(const CatalogEntry &target) const {
 	D_ASSERT(oid && target.oid);
 	return oid == target.oid;
-}
-
-bool LogicalDependency::operator==(const LogicalDependency &other) const {
-	return other.entry.name == entry.name && other.entry.schema_path == entry.schema_path &&
-	       other.entry.type == entry.type;
 }
 
 void LogicalDependencyList::AddDependency(CatalogEntry &entry) {

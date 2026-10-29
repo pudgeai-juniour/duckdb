@@ -37,7 +37,6 @@ public:
 	explicit LogicalDependency(CatalogEntry &entry);
 	LogicalDependency();
 	LogicalDependency(optional_ptr<Catalog> catalog, CatalogEntryInfo entry, Identifier catalog_str);
-	bool operator==(const LogicalDependency &other) const;
 	bool Refers(const CatalogEntry &target) const;
 
 public:

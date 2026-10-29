@@ -82,7 +82,8 @@ MangledDependencyName::MangledDependencyName(const MangledEntryName &from, const
 #endif
 }
 
-DependencyManager::DependencyManager(DuckCatalog &catalog) : catalog(catalog), subjects(catalog), dependents(catalog) {
+DependencyManager::DependencyManager(DuckCatalog &catalog, bool case_sensitive)
+    : catalog(catalog), subjects(catalog, nullptr, case_sensitive), dependents(catalog, nullptr, case_sensitive) {
 }
 
 vector<Identifier> DependencyManager::GetSchemaPath(const CatalogEntry &entry) {
@@ -671,7 +672,8 @@ void DependencyManager::RemoveDependencyBetween(CatalogTransaction transaction, 
 	auto dependent_info = GetLookupProperties(transaction, dependent);
 	auto subject_info = GetLookupProperties(transaction, subject);
 	auto matches = [](const CatalogEntryInfo &a, const CatalogEntryInfo &b) {
-		return a.type == b.type && a.schema_path == b.schema_path && a.name == b.name;
+		return a.type == b.type && CatalogEntryInfo::SamePath(a.schema_path, b.schema_path) &&
+		       IdentifierEquality(true)(a.name, b.name);
 	};
 	vector<DependencyInfo> to_remove;
 	ScanSubjects(transaction, dependent_info, [&](DependencyEntry &dep) {
@@ -1276,7 +1278,7 @@ void DependencyManager::AlterObject(CatalogTransaction transaction, CatalogEntry
 		return dep.Dependent().subdependencies.contains(SubDependency {AlterTableType::REMOVE_COLUMN, column});
 	};
 	string blockers;
-	const bool renamed = !(old_obj.name == new_obj.name);
+	const bool renamed = !IdentifierEquality(true)(old_obj.name, new_obj.name);
 	vector<pair<reference<Catalog>, DependencyInfo>> foreign_edges;
 	// Other entries that depend on us
 	ScanAllDependents(transaction, old_info, [&](DependencyEntry &dep) {
