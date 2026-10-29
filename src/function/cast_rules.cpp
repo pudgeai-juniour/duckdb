@@ -32,6 +32,8 @@ static int64_t TargetTypeCost(const LogicalType &type) {
 		return 123;
 	case LogicalTypeId::TIMESTAMP_TZ_NS:
 		return 124;
+	case LogicalTypeId::BIT:
+		return 111;
 	case LogicalTypeId::VARCHAR:
 		return 149;
 	case LogicalTypeId::STRUCT:

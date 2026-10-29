@@ -335,6 +335,11 @@ ScalarFunctionSet LengthFun::GetFunctions() {
 	list_fun.GetSignature().AddParameter("list", LogicalType::LIST(LogicalType::ANY));
 	length.AddFunction(list_fun);
 
+	ScalarFunction blob_fun({}, LogicalType::BIGINT, ScalarFunction::UnaryFunction<string_t, int64_t, StrLenOperator>,
+	                        nullptr, ByteLengthPropagateStats);
+	blob_fun.GetSignature().AddParameter("blob", LogicalType::BLOB);
+	length.AddFunction(blob_fun);
+
 	return (length);
 }
 

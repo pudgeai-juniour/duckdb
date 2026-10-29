@@ -147,6 +147,12 @@
                 "description": "Returns the length of the `list`.",
                 "example": "length([1,2,3])",
                 "categories": ["list"]
+            },
+            {
+                "parameters": [{"name": "blob", "type": "BLOB"}],
+                "description": "Number of bytes in `blob`.",
+                "example": "length('\\xAA\\xBB'::BLOB)",
+                "categories": ["blob"]
             }
         ],
         "type": "scalar_function_set",
