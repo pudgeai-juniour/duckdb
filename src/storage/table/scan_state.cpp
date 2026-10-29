@@ -300,9 +300,17 @@ bool CollectionScanState::InitializeLookupRowGroup() {
 	// Id-driven analogue of the GetNextRowGroup skip loop in InitializeScan: jump to the row group
 	// holding the next requested id and skip any the filter zonemap prunes (their ids are dropped).
 	while (pk_lookups_it != pk_lookups_end) {
-		auto next = row_groups->GetSegment(static_cast<idx_t>(*pk_lookups_it));
-		if (!next || next->GetRowStart() >= max_row) {
-			break;
+		optional_ptr<SegmentNode<RowGroup>> next;
+		{
+			auto l = row_groups->Lock();
+			idx_t index;
+			if (row_groups->TryGetSegmentIndex(l, static_cast<idx_t>(*pk_lookups_it), index)) {
+				next = row_groups->GetSegmentByIndex(l, NumericCast<int64_t>(index));
+			}
+		}
+		if (!next) {
+			++pk_lookups_it;
+			continue;
 		}
 		if (next->GetNode().InitializeScan(*this, *next)) {
 			return true;

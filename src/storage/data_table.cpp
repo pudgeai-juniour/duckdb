@@ -398,7 +398,12 @@ idx_t DataTable::LookupRows(DuckTransaction &transaction, ClientContext &context
 		auto segments = row_groups->GetRowGroups();
 		auto lock = segments->Lock();
 		for (auto pk = pk_begin; pk != pk_end;) {
-			const auto row_end = segments->GetSegment(lock, static_cast<idx_t>(*pk))->GetRowEnd();
+			idx_t index;
+			if (!segments->TryGetSegmentIndex(lock, static_cast<idx_t>(*pk), index)) {
+				++pk;
+				continue;
+			}
+			const auto row_end = segments->GetSegmentByIndex(lock, NumericCast<int64_t>(index))->GetRowEnd();
 			const auto end = std::lower_bound(pk, pk_end, static_cast<row_t>(row_end));
 			ranges.emplace_back(static_cast<idx_t>(pk - pk_begin), static_cast<idx_t>(end - pk_begin));
 			pk = end;
