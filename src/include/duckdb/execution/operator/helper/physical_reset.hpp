@@ -47,7 +47,7 @@ public:
 
 private:
 	static void ResetOption(ExecutionContext &context, DBConfig &config, const ConfigurationOption &option,
-	                        SetScope effective_scope);
+	                        const char *name, SetScope effective_scope);
 	static void ResetExtensionVariable(ExecutionContext &context, DBConfig &config, const Identifier &name,
 	                                   ExtensionOption &extension_option, SetScope effective_scope);
 };

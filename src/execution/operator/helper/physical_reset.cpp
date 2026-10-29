@@ -61,7 +61,7 @@ void PhysicalReset::ResetExtensionVariable(ExecutionContext &context, DBConfig &
 }
 
 void PhysicalReset::ResetOption(ExecutionContext &context, DBConfig &config, const ConfigurationOption &option,
-                                SetScope variable_scope) {
+                                const char *name, SetScope variable_scope) {
 	config.CheckLock(option.name);
 
 	if (option.default_value) {
@@ -76,7 +76,7 @@ void PhysicalReset::ResetOption(ExecutionContext &context, DBConfig &config, con
 		// Gate the rollback observer on is_user_set so RESET ALL no-ops don't
 		// reach the sdb tracker.
 		if (context.client.setting_change_handler) {
-			context.client.setting_change_handler(context.client, option.name, variable_scope, nullptr);
+			context.client.setting_change_handler(context.client, name, variable_scope, nullptr);
 		}
 		if (option.set_callback) {
 			SettingCallbackInfo info(context.client, variable_scope);
@@ -98,7 +98,7 @@ void PhysicalReset::ResetOption(ExecutionContext &context, DBConfig &config, con
 			throw CatalogException("option \"%s\" cannot be reset globally", option.name);
 		}
 		if (context.client.setting_change_handler) {
-			context.client.setting_change_handler(context.client, option.name, variable_scope, nullptr);
+			context.client.setting_change_handler(context.client, name, variable_scope, nullptr);
 		}
 		auto &db = DatabaseInstance::GetDatabase(context.client);
 		config.ResetOption(&db, option);
@@ -119,7 +119,7 @@ void PhysicalReset::ResetOption(ExecutionContext &context, DBConfig &config, con
 		const bool had_post = context.client.TryGetCurrentSetting(option.name, post_value);
 		const bool changed = had_pre != had_post || !Value::NotDistinctFrom(pre_value, post_value);
 		if (changed && context.client.setting_change_handler) {
-			context.client.setting_change_handler(context.client, option.name, variable_scope, nullptr);
+			context.client.setting_change_handler(context.client, name, variable_scope, nullptr);
 		}
 		break;
 	}
@@ -154,7 +154,8 @@ SourceResultType PhysicalReset::GetDataInternal(ExecutionContext &context, DataC
 	Identifier option_name(name.ToStdString());
 	auto option = DBConfig::GetOptionByName(option_name);
 	if (option) {
-		ResetOption(context, config, *option, PhysicalSet::GetSettingScope(*option, scope));
+		ResetOption(context, config, *option, option_name.GetIdentifierName().c_str(),
+		            PhysicalSet::GetSettingScope(*option, scope));
 		return SourceResultType::FINISHED;
 	}
 	ExtensionOption extension_option;
@@ -184,7 +185,7 @@ void PhysicalReset::ResetAll(ExecutionContext &context, SetScope scope) {
 		if (variable_scope == SetScope::GLOBAL) {
 			continue;
 		}
-		ResetOption(context, config, *option, variable_scope);
+		ResetOption(context, config, *option, option->name, variable_scope);
 	}
 	for (auto &ext : config.GetExtensionSettings()) {
 		auto variable_scope = PhysicalSet::GetSettingScope(ext.second, scope);
