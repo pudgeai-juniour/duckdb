@@ -485,10 +485,6 @@ AddColumnEntry PEGTransformerFactory::TransformAddColumnEntry(
 	}
 	if (type) {
 		new_column.type = *type;
-		if (TransformSerialType(new_column.type)) {
-			new_column.add_column_constraints.serial = true;
-			new_column.add_column_constraints.add_not_null = true;
-		}
 	}
 	if (column_constraint) {
 		for (auto &constraint : *column_constraint) {
@@ -529,6 +525,10 @@ AddColumnEntry PEGTransformerFactory::TransformAddColumnEntry(
 				new_column.type = ApplyColumnCollation(new_column.type, std::move(constraint.expression));
 			}
 		}
+	}
+	if (TransformSerialType(new_column.type)) {
+		new_column.add_column_constraints.serial = true;
+		new_column.add_column_constraints.add_not_null = true;
 	}
 	return new_column;
 }
