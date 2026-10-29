@@ -1,5 +1,6 @@
 #include "duckdb/function/table/table_scan.hpp"
 #include "duckdb/catalog/catalog.hpp"
+#include "duckdb/catalog/catalog_entry_retriever.hpp"
 #include "duckdb/catalog/catalog_entry/table_catalog_entry.hpp"
 
 #include "duckdb/catalog/catalog_entry/duck_table_entry.hpp"
@@ -25,6 +26,7 @@
 #include "duckdb/parser/expression/constant_expression.hpp"
 #include "duckdb/parser/expression/function_expression.hpp"
 #include "duckdb/parser/tableref/table_function_ref.hpp"
+#include "duckdb/planner/binder.hpp"
 #include "duckdb/planner/expression.hpp"
 #include "duckdb/planner/expression/bound_columnref_expression.hpp"
 #include "duckdb/planner/expression/bound_comparison_expression.hpp"
@@ -1432,9 +1434,11 @@ TableFunction TableScanFunction::GetFunction() {
 
 static unique_ptr<FunctionData> IndexScanBind(ClientContext &context, TableFunctionBindInput &input,
                                               vector<LogicalType> &return_types, vector<Identifier> &names) {
-	QualifiedName name(Identifier(StringValue::Get(input.inputs[0])), Identifier(StringValue::Get(input.inputs[1])),
-	                   Identifier(StringValue::Get(input.inputs[2])));
-	auto &index = Catalog::GetEntry<IndexCatalogEntry>(context, name);
+	vector<Identifier> path;
+	for (auto &part : ListValue::GetChildren(input.inputs[0])) {
+		path.emplace_back(StringValue::Get(part));
+	}
+	auto &index = Catalog::GetEntry<IndexCatalogEntry>(context, QualifiedName::FromPath(std::move(path)));
 	auto relation = index.GetRelation(index.catalog.GetCatalogTransaction(context));
 	auto &table = relation && relation->type == CatalogType::TABLE_ENTRY
 	                  ? relation->Cast<TableCatalogEntry>()
@@ -1450,15 +1454,21 @@ static unique_ptr<FunctionData> IndexScanBind(ClientContext &context, TableFunct
 
 unique_ptr<TableRef> TableScanFunction::IndexReplacementScan(ClientContext &context, ReplacementScanInput &input,
                                                              optional_ptr<ReplacementScanData>) {
-	auto index = Catalog::GetEntry<IndexCatalogEntry>(context, input.name, OnEntryNotFound::RETURN_NULL);
+	CatalogEntryRetriever retriever(context);
+	auto index = Catalog::GetEntry<IndexCatalogEntry>(context, Binder::BindTableName(retriever, input.name),
+	                                                  OnEntryNotFound::RETURN_NULL);
 	if (!index || index->index_type != ART::TYPE_NAME ||
 	    index->ParentCatalog().Compatibility() != SqlCompatibility::POSTGRES) {
 		return nullptr;
 	}
+	vector<unique_ptr<ParsedExpression>> path;
+	path.push_back(ConstantExpression::String(index->ParentCatalog().GetName().GetIdentifierName()));
+	for (auto &schema : index->ParentSchemaPath(index->catalog.GetCatalogTransaction(context))) {
+		path.push_back(ConstantExpression::String(schema.GetIdentifierName()));
+	}
+	path.push_back(ConstantExpression::String(index->name.GetIdentifierName()));
 	vector<unique_ptr<ParsedExpression>> arguments;
-	arguments.push_back(ConstantExpression::String(index->ParentCatalog().GetName().GetIdentifierName()));
-	arguments.push_back(ConstantExpression::String(index->ParentSchema(context).name.GetIdentifierName()));
-	arguments.push_back(ConstantExpression::String(index->name.GetIdentifierName()));
+	arguments.push_back(make_uniq<FunctionExpression>("list_value", std::move(path)));
 	auto ref = make_uniq<TableFunctionRef>();
 	ref->function = make_uniq<FunctionExpression>("seq_scan", std::move(arguments));
 	return std::move(ref);
@@ -1468,8 +1478,7 @@ void TableScanFunction::RegisterFunction(BuiltinFunctions &set) {
 	TableFunctionSet table_scan_set("seq_scan");
 	table_scan_set.AddFunction(GetFunction());
 	auto index_scan = GetFunction();
-	index_scan.GetSignature() =
-	    FunctionSignature({LogicalType::VARCHAR, LogicalType::VARCHAR, LogicalType::VARCHAR}, LogicalType::INVALID);
+	index_scan.GetSignature() = FunctionSignature({LogicalType::LIST(LogicalType::VARCHAR)}, LogicalType::INVALID);
 	index_scan.bind = IndexScanBind;
 	table_scan_set.AddFunction(std::move(index_scan));
 	set.AddFunction(std::move(table_scan_set));
