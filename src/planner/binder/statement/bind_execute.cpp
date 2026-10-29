@@ -1,5 +1,4 @@
 #include "duckdb/planner/binder.hpp"
-#include "duckdb/common/exception/conversion_exception.hpp"
 #include "duckdb/main/prepared_statement.hpp"
 #include "duckdb/parser/statement/execute_statement.hpp"
 #include "duckdb/planner/planner.hpp"
@@ -7,6 +6,7 @@
 #include "duckdb/planner/expression_binder/constant_binder.hpp"
 #include "duckdb/main/client_data.hpp"
 #include "duckdb/execution/expression_executor.hpp"
+#include "duckdb/planner/expression/bound_cast_expression.hpp"
 #include "duckdb/planner/expression/bound_constant_expression.hpp"
 #include "duckdb/parser/expression/constant_expression.hpp"
 #include "duckdb/main/client_context.hpp"
@@ -111,12 +111,9 @@ BoundStatement Binder::Bind(ExecuteStatement &stmt) {
 		if (value == bind_values.end() || value->second.return_type == hint.second) {
 			continue;
 		}
-		string error;
-		auto cast_value = value->second.GetValue().TryCastAs(context, hint.second, &error);
-		if (!cast_value) {
-			throw ConversionException(error);
-		}
-		value->second = BoundParameterData(std::move(*cast_value), hint.second);
+		auto cast = BoundCastExpression::AddCastToType(
+		    context, make_uniq<BoundConstantExpression>(value->second.GetValue()), hint.second);
+		value->second = BoundParameterData(ExpressionExecutor::EvaluateScalar(context, *cast), hint.second);
 	}
 	prepared->PopulateMissingParameterValues(context, bind_values);
 	unique_ptr<LogicalOperator> rebound_plan;
