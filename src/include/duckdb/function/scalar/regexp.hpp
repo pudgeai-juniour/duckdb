@@ -43,6 +43,10 @@ struct RegexpExtractAll {
 	                                                     FunctionData *bind_data);
 };
 
+struct RegexpSubstring {
+	static ScalarFunction GetFunction();
+};
+
 struct RegexpBaseBindData : public FunctionData {
 	RegexpBaseBindData();
 	RegexpBaseBindData(duckdb_re2::RE2::Options options, string constant_string, bool constant_pattern = true);

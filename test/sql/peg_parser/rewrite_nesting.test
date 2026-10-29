@@ -20,7 +20,7 @@ false	true	true	true	true	true
 query III
 SELECT 5 BETWEEN SYMMETRIC 10 AND 1, 'abc' SIMILAR TO 'a#%' ESCAPE '#', SUBSTRING('foobar' SIMILAR '#"o_b#"%' ESCAPE '#') IS NOT NULL
 ----
-true	false	true
+true	false	false
 
 query IIIII
 SELECT 1 = ANY(SELECT 1), 1 = ALL(SELECT 2), 1 = ANY([1, 2]), 1 = ALL([1, 1]), 1 <> ALL('{2,3}')

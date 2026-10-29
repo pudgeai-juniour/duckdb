@@ -3,6 +3,7 @@
 #include "duckdb/common/exception.hpp"
 #include "duckdb/common/vector_operations/vector_operations.hpp"
 #include "duckdb/common/vector_operations/ternary_executor.hpp"
+#include "duckdb/function/scalar/regexp.hpp"
 #include "duckdb/function/scalar/string_common.hpp"
 #include "duckdb/function/scalar/string_functions.hpp"
 #include "duckdb/planner/expression/bound_constant_expression.hpp"
@@ -453,10 +454,8 @@ unique_ptr<BaseStatistics> SubstringGraphemePropagateStats(ClientContext &contex
 	return result.ToUnique();
 }
 
-} // namespace
-
-ScalarFunctionSet SubstringFun::GetFunctions() {
-	ScalarFunctionSet substr("substring");
+ScalarFunctionSet PositionalSubstring(const char *name) {
+	ScalarFunctionSet substr(name);
 
 	ScalarFunction three_arg({}, LogicalType::VARCHAR, SubstringFunction<SubstringUnicodeOp>, SubstringBind,
 	                         SubstringPropagateStats);
@@ -470,10 +469,24 @@ ScalarFunctionSet SubstringFun::GetFunctions() {
 	                       SubstringPropagateStats);
 	two_arg.GetSignature().AddParameter("string", LogicalType::VARCHAR).AddParameter("start", LogicalType::BIGINT);
 	substr.AddFunction(two_arg);
+	return substr;
+}
 
+} // namespace
+
+ScalarFunctionSet SubstringFun::GetFunctions() {
+	auto substr = PositionalSubstring(SubstringFun::Name);
+	substr.AddFunction(RegexpSubstring::GetFunction());
 	// throws if the offset or length are out of the supported range
 	substr.SetFallible();
-	return (substr);
+	return substr;
+}
+
+ScalarFunctionSet SubstrFun::GetFunctions() {
+	auto substr = PositionalSubstring(SubstrFun::Name);
+	// throws if the offset or length are out of the supported range
+	substr.SetFallible();
+	return substr;
 }
 
 ScalarFunctionSet SubstringGraphemeFun::GetFunctions() {

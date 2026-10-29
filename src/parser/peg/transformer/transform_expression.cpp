@@ -2860,7 +2860,7 @@ PEGTransformerFactory::TransformSubstringSimilar(PEGTransformer &transformer, un
 	regex_args.push_back(std::move(expression));
 	regex_args.push_back(std::move(similar_call));
 	transformer.AddDepth(1);
-	return make_uniq<FunctionExpression>(Identifier("regexp_extract"), std::move(regex_args));
+	return make_uniq<FunctionExpression>(Identifier("substring"), std::move(regex_args));
 }
 
 vector<unique_ptr<ParsedExpression>>

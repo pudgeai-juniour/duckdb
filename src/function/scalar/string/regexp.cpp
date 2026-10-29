@@ -383,6 +383,43 @@ static void RegexExtractFunction(DataChunk &args, ExpressionState &state, Vector
 	}
 }
 
+static optional<string_t> ExtractSubstring(const string_t &input, const RE2 &re) {
+	duckdb_re2::StringPiece in_piece(input.GetData(), input.GetSize());
+	duckdb_re2::StringPiece submatch[2];
+	const int group = re.NumberOfCapturingGroups() > 0 ? 1 : 0;
+	if (!re.Match(in_piece, 0, in_piece.size(), duckdb_re2::RE2::UNANCHORED, submatch, group + 1) ||
+	    !submatch[group].data()) {
+		return {};
+	}
+	VerifyUTF8Result(submatch[group].data(), submatch[group].size());
+	return string_t(submatch[group].data(), UnsafeNumericCast<uint32_t>(submatch[group].size()));
+}
+
+static void RegexSubstringFunction(DataChunk &args, ExpressionState &state, Vector &result) {
+	auto &func_expr = state.expr.Cast<BoundFunctionExpression>();
+	const auto &info = func_expr.BindInfo()->Cast<RegexpExtractBindData>();
+
+	const auto &strings = args.data[0];
+	const auto &patterns = args.data[1];
+	StringVector::AddHeapReference(result, strings);
+
+	if (info.constant_pattern) {
+		auto &lstate = ExecuteFunctionState::GetFunctionState(state)->Cast<RegexLocalState>();
+		UnaryExecutor::Execute<string_t, string_t>(
+		    strings, result, [&](string_t input) { return ExtractSubstring(input, lstate.constant_pattern); });
+	} else {
+		auto &cache = ExecuteFunctionState::GetFunctionState(state)->Cast<RegexPatternCacheState>().cache;
+		BinaryExecutor::Execute<string_t, string_t, string_t>(strings, patterns, result,
+		                                                      [&](string_t input, string_t pattern) {
+			                                                      auto &re = cache.Get(CreateStringPiece(pattern));
+			                                                      if (!re.ok()) {
+				                                                      throw InvalidInputException(re.error());
+			                                                      }
+			                                                      return ExtractSubstring(input, re);
+		                                                      });
+	}
+}
+
 //===--------------------------------------------------------------------===//
 // Regexp Extract Struct
 //===--------------------------------------------------------------------===//
@@ -636,6 +673,14 @@ ScalarFunctionSet RegexpExtractAllFun::GetFunctions() {
 	// throws when accessing a group that the pattern does not have
 	regexp_extract_all.SetFallible();
 	return (regexp_extract_all);
+}
+
+ScalarFunction RegexpSubstring::GetFunction() {
+	ScalarFunction fun(SubstringFun::Name, {}, LogicalType::VARCHAR, RegexSubstringFunction, RegexExtractBind, nullptr,
+	                   RegexInitLocalState);
+	fun.GetSignature().AddParameter("string", LogicalType::VARCHAR);
+	fun.GetSignature().AddParameter("pattern", LogicalType::VARCHAR);
+	return fun;
 }
 
 } // namespace duckdb
