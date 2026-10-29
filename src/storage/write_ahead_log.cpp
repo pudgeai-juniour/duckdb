@@ -312,8 +312,14 @@ public:
 		serializer.WriteProperty(size_field, "size", size);
 		serializer.OnPropertyBegin(bitmap_field, tag);
 		if (size != 0) {
-			auto bytes = checksum_writer.ReserveAligned(size, WAL_FROZEN_BITMAP_ALIGNMENT);
-			::roaring::api::roaring_bitmap_frozen_serialize(bitmap, char_ptr_cast(bytes));
+			static constexpr auto alignment = std::align_val_t {WAL_FROZEN_BITMAP_ALIGNMENT};
+			const auto release = [](data_t *frozen) {
+				::operator delete(frozen, alignment);
+			};
+			std::unique_ptr<data_t, decltype(release)> frozen(static_cast<data_t *>(::operator new(size, alignment)),
+			                                                  release);
+			::roaring::api::roaring_bitmap_frozen_serialize(bitmap, char_ptr_cast(frozen.get()));
+			memcpy(checksum_writer.ReserveAligned(size, WAL_FROZEN_BITMAP_ALIGNMENT), frozen.get(), size);
 		}
 		serializer.OnPropertyEnd();
 	}
