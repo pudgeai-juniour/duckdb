@@ -10,6 +10,7 @@ bool IsPrepareableStatement(StatementType type) {
 	case StatementType::UPDATE_STATEMENT:
 	case StatementType::COPY_STATEMENT:
 	case StatementType::DELETE_STATEMENT:
+	case StatementType::MERGE_INTO_STATEMENT:
 		return true;
 	default:
 		return false;
