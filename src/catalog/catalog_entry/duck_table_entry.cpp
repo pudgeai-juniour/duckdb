@@ -1605,13 +1605,13 @@ void DuckTableEntry::ReplaceStorage(DuckTableEntry &source) {
 static vector<pair<Identifier, Identifier>> RenamedColumns(const ColumnList &previous, const ColumnList &current) {
 	IdentifierEquality same(current.IsCaseSensitive());
 	unordered_map<idx_t, reference<const ColumnDefinition>> previous_by_oid;
-	for (auto &column : previous.Physical()) {
+	for (auto &column : previous.Logical()) {
 		if (column.CatalogOid()) {
 			previous_by_oid.emplace(column.CatalogOid(), column);
 		}
 	}
 	vector<pair<Identifier, Identifier>> renamed;
-	for (auto &column : current.Physical()) {
+	for (auto &column : current.Logical()) {
 		optional_ptr<const ColumnDefinition> previous_column;
 		if (column.CatalogOid()) {
 			auto entry = previous_by_oid.find(column.CatalogOid());
