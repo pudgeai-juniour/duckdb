@@ -3,8 +3,6 @@
 
 #include "duckdb/catalog/catalog.hpp"
 #include "duckdb/catalog/catalog_entry/sequence_catalog_entry.hpp"
-#include "duckdb/catalog/catalog_entry/table_catalog_entry.hpp"
-#include "duckdb/catalog/dependency_manager.hpp"
 #include "duckdb/common/exception.hpp"
 #include "duckdb/execution/expression_executor.hpp"
 #include "duckdb/planner/expression/bound_cast_expression.hpp"
@@ -171,18 +169,6 @@ unique_ptr<FunctionData> NextValBind(BindScalarFunctionInput &input) {
 	return make_uniq<NextvalBindData>(seq);
 }
 
-unique_ptr<FunctionData> SetValBind(BindScalarFunctionInput &input) {
-	auto result = NextValBind(input);
-	auto &sequence = result->Cast<NextvalBindData>().sequence;
-	auto &catalog = sequence.ParentCatalog();
-	auto owner =
-	    catalog.GetDependencyManager()->OwnerOf(catalog.GetCatalogTransaction(input.GetClientContext()), sequence);
-	if (owner && owner->type == CatalogType::TABLE_ENTRY) {
-		owner->Cast<TableCatalogEntry>().VerifySequenceChange(sequence);
-	}
-	return result;
-}
-
 void Serialize(Serializer &serializer, const optional_ptr<FunctionData> bind_data, const BoundScalarFunction &) {
 	auto &next_val_bind_data = bind_data->Cast<NextvalBindData>();
 	serializer.WritePropertyWithDefault(100, "sequence_create_info", next_val_bind_data.sequence.GetInfo());
@@ -243,7 +229,7 @@ ScalarFunctionSet SetvalFun::GetFunctions() {
 	set_val.GetSignature()
 	    .AddParameter("sequence_name", LogicalType::VARCHAR)
 	    .AddParameter("value", LogicalType::BIGINT);
-	set_val.SetBindCallback(SetValBind);
+	set_val.SetBindCallback(NextValBind);
 	set_val.SetSerializeCallback(Serialize);
 	set_val.SetDeserializeCallback(Deserialize);
 	set_val.SetModifiedDatabasesCallback(NextValModifiedDatabases);
