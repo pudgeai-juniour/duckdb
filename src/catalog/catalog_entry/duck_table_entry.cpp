@@ -1721,6 +1721,9 @@ void DuckTableEntry::AlterDependentIndexes(CatalogTransaction transaction, DuckT
 		for (auto &expr : index_info.parsed_expressions) {
 			changed |= rename(*expr);
 		}
+		if (index_info.where_clause) {
+			changed |= rename(*index_info.where_clause);
+		}
 		if (renamed_table) {
 			changed |= RewriteIndexDependencies(index_info.dependencies, previous.name, name);
 		}

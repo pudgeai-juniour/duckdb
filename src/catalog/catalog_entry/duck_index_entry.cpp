@@ -70,6 +70,7 @@ unique_ptr<CatalogEntry> DuckIndexEntry::AlterEntry(CatalogTransaction transacti
 	for (auto &expr : definition.parsed_expressions) {
 		index.parsed_expressions.push_back(expr->Copy());
 	}
+	index.where_clause = definition.where_clause ? definition.where_clause->Copy() : nullptr;
 	return result;
 }
 
