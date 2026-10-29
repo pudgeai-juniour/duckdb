@@ -1178,9 +1178,35 @@ PEGTransformerFactory::FinalizeWindowDefinitionTrampoline(PEGTransformer &transf
 	return transformer.MakeResult<unique_ptr<ParsedExpression>>(std::move(result));
 }
 
+static void SetSampleSize(SampleOptions &options, const Value &value, bool percentage) {
+	options.is_percentage = percentage;
+	if (percentage) {
+		auto percent = value.GetValue<double>();
+		if (percent > 100) {
+			throw ParserException("Sample sample_size %llf out of range, must be between 0 and 100", percent);
+		}
+		options.sample_size = Value::DOUBLE(percent);
+		options.method = SampleMethod::SYSTEM_SAMPLE;
+	} else {
+		auto rows = value.GetValue<int64_t>();
+		if (value.GetValue<uint64_t>() > SampleOptions::MAX_SAMPLE_ROWS) {
+			throw ParserException("Sample rows %lld out of range, must be between 0 and %lld", rows,
+			                      SampleOptions::MAX_SAMPLE_ROWS);
+		}
+		options.sample_size = Value::BIGINT(rows);
+		options.method = SampleMethod::RESERVOIR_SAMPLE;
+	}
+}
+
 unique_ptr<SampleOptions> PEGTransformerFactory::TransformSampleEntryFunction(
     PEGTransformer &transformer, const optional<SampleMethod> &sample_function, unique_ptr<SampleOptions> sample_count,
     const optional<optional_idx> &repeatable_sample) {
+	if (sample_count->method == SampleMethod::INVALID) {
+		const auto value = sample_count->sample_size;
+		SetSampleSize(*sample_count, value,
+		              sample_function && (*sample_function == SampleMethod::SYSTEM_SAMPLE ||
+		                                  *sample_function == SampleMethod::BERNOULLI_SAMPLE));
+	}
 	if (sample_function) {
 		sample_count->method = *sample_function;
 	}
@@ -1194,6 +1220,10 @@ unique_ptr<SampleOptions> PEGTransformerFactory::TransformSampleEntryFunction(
 unique_ptr<SampleOptions>
 PEGTransformerFactory::TransformSampleEntryCount(PEGTransformer &transformer, unique_ptr<SampleOptions> sample_count,
                                                  const optional<pair<SampleMethod, optional_idx>> &sample_properties) {
+	if (sample_count->method == SampleMethod::INVALID) {
+		const auto value = sample_count->sample_size;
+		SetSampleSize(*sample_count, value, false);
+	}
 	if (sample_properties) {
 		sample_count->method = sample_properties->first;
 		sample_count->seed = sample_properties->second;
@@ -1733,23 +1763,12 @@ unique_ptr<SampleOptions> PEGTransformerFactory::TransformSampleCount(PEGTransfo
 	}
 	auto &const_expr = sample_value->Cast<ConstantExpression>();
 	auto sample_value_const = const_expr.GetLiteral().ToValue();
-	result->is_percentage = sample_unit.value_or(false);
-	if (result->is_percentage) {
-		auto percentage = sample_value_const.GetValue<double>();
-		if (percentage < 0 || percentage > 100) {
-			throw ParserException("Sample sample_size %llf out of range, must be between 0 and 100", percentage);
-		}
-		result->sample_size = Value::DOUBLE(percentage);
-		result->method = SampleMethod::SYSTEM_SAMPLE;
-	} else {
-		auto rows = sample_value_const.GetValue<int64_t>();
-		if (rows < 0 || sample_value_const.GetValue<uint64_t>() > SampleOptions::MAX_SAMPLE_ROWS) {
-			throw ParserException("Sample rows %lld out of range, must be between 0 and %lld", rows,
-			                      SampleOptions::MAX_SAMPLE_ROWS);
-		}
-		result->sample_size = Value::BIGINT(rows);
-		result->method = SampleMethod::RESERVOIR_SAMPLE;
+	if (!sample_unit) {
+		result->sample_size = std::move(sample_value_const);
+		result->method = SampleMethod::INVALID;
+		return result;
 	}
+	SetSampleSize(*result, sample_value_const, *sample_unit);
 	return result;
 }
 
