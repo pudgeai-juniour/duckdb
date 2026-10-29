@@ -1330,7 +1330,7 @@ DescribeTarget <- DescribeBaseTableName / DescribeStringLiteral
 DescribeBaseTableName <- BaseTableName
 DescribeStringLiteral <- StringLiteral
 
-ShowAliasedSetting <- ShowOrDescribe ShowSettingAlias
+ShowAliasedSetting <- ShowRule ShowSettingAlias
 ShowSettingAlias <- ('TRANSACTION' 'ISOLATION' 'LEVEL') / ('SESSION' 'AUTHORIZATION') / ('TIME' 'ZONE')
 
 Summarize <- SummarizeRule

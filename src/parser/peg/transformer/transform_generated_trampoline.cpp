@@ -1427,7 +1427,7 @@ static const TransformFrameOps SUMMARIZE_RULE_OPS = {"SummarizeRule",
                                                      &PEGTransformerFactory::FinalizeSummarizeRuleTrampoline};
 static const TransformFrameOps SHOW_OR_DESCRIBE_OPS = {"ShowOrDescribe",
                                                        &PEGTransformerFactory::InitializeShowOrDescribeTrampoline,
-                                                       &PEGTransformerFactory::FinalizeShowOrDescribeTrampoline};
+                                                       &PEGTransformerFactory::FinalizeShowOrDescribeTrampoline, true};
 static const TransformFrameOps SHOW_RULE_OPS = {"ShowRule", &PEGTransformerFactory::InitializeShowRuleTrampoline,
                                                 &PEGTransformerFactory::FinalizeShowRuleTrampoline};
 static const TransformFrameOps DESCRIBE_RULE_OPS = {"DescribeRule",
