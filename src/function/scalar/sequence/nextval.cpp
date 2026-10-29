@@ -12,6 +12,7 @@
 #include "duckdb/common/serializer/serializer.hpp"
 #include "duckdb/transaction/meta_transaction.hpp"
 #include "duckdb/planner/binder.hpp"
+#include "duckdb/main/settings.hpp"
 
 namespace duckdb {
 
@@ -50,7 +51,8 @@ SequenceCatalogEntry &BindSequenceFromContext(ClientContext &context, const Qual
 }
 
 SequenceCatalogEntry &BindSequence(Binder &binder, const Identifier &name) {
-	return BindSequence(binder, QualifiedName::Parse(name.GetIdentifierName()));
+	return BindSequence(binder, QualifiedName::Parse(name.GetIdentifierName(),
+	                                                 Settings::Get<PreserveIdentifierCaseSetting>(binder.context)));
 }
 
 struct NextValLocalState : public FunctionLocalState {
