@@ -267,8 +267,10 @@ BoundStatement Binder::BindNode(UpdateQueryNode &node) {
 	}
 	auto &table = *table_ptr;
 
-	if (auto expanded = TryExpandTriggers(node, table, TriggerEventType::UPDATE_EVENT)) {
-		return std::move(*expanded);
+	if (!node.prioritize_table_when_binding) {
+		if (auto expanded = TryExpandTriggers(node, table, TriggerEventType::UPDATE_EVENT)) {
+			return std::move(*expanded);
+		}
 	}
 
 	optional_ptr<LogicalGet> get;
