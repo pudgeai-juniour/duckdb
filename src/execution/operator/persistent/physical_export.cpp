@@ -244,8 +244,10 @@ static void WriteCatalogEntries(stringstream &ss, CatalogTransaction transaction
 		                             entry.get().name == entry.get().ParentCatalog().GetDefaultSchema())) {
 			continue;
 		}
-		if (dependencies && CreatedByOwner(entry) && dependencies->OwnerOf(transaction, entry)) {
-			continue;
+		if (dependencies) {
+			if (CreatedByOwner(entry) && dependencies->OwnerOf(transaction, entry)) {
+				continue;
+			}
 		}
 		auto create_info = entry.get().GetInfo(transaction);
 		if (create_info->type == CatalogType::TABLE_ENTRY) {
