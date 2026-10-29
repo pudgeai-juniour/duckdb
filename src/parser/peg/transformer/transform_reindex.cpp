@@ -7,7 +7,7 @@ namespace duckdb {
 
 // SereneDB extension: REINDEX INDEX [CONCURRENTLY] <name> rebuilds a
 // view-backed inverted index from the current source state. It lowers to the
-// serenedb_reindex pragma (positional parameters: name, schema, catalog).
+// serenedb_reindex pragma, whose parameters are the parts of the name as written.
 // CONCURRENTLY is accepted and always-on: the rebuild stages invisibly and
 // publishes atomically, so it never blocks readers.
 unique_ptr<SQLStatement> PEGTransformerFactory::TransformReindexStatement(PEGTransformer &transformer,
@@ -16,10 +16,9 @@ unique_ptr<SQLStatement> PEGTransformerFactory::TransformReindexStatement(PEGTra
                                                                           unique_ptr<BaseTableRef> table) {
 	auto pragma = make_uniq<PragmaStatement>();
 	pragma->info->name = "serenedb_reindex";
-	auto &qualified_name = table->GetQualifiedName();
-	pragma->info->parameters.push_back(ConstantExpression::String(qualified_name.Name().GetIdentifierName()));
-	pragma->info->parameters.push_back(ConstantExpression::String(qualified_name.Schema().GetIdentifierName()));
-	pragma->info->parameters.push_back(ConstantExpression::String(qualified_name.Catalog().GetIdentifierName()));
+	for (auto &part : table->GetQualifiedName().Path()) {
+		pragma->info->parameters.push_back(ConstantExpression::String(part.GetIdentifierName()));
+	}
 	return std::move(pragma);
 }
 
