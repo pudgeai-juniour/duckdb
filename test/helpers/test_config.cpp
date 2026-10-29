@@ -928,6 +928,14 @@ void FailureSummary::Log(string log_message) {
 	summary.failures_summary.push_back(std::move(log_message));
 }
 
+void FailureSummary::Reset() {
+	auto &summary = FailureSummary::Instance();
+	lock_guard<mutex> lock(summary.failures_lock);
+	summary.failures_summary.clear();
+	summary.reported_files.clear();
+	summary.failures_summary_counter = 0;
+}
+
 idx_t FailureSummary::GetSummaryCounter() {
 	auto &summary = FailureSummary::Instance();
 	return ++summary.failures_summary_counter;

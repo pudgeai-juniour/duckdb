@@ -514,6 +514,7 @@ private:
 					}
 				}
 			}
+			FailureSummary::Reset();
 			worker_result_fd = result_pipe[1];
 			worker_spec = "\"";
 			for (auto c : test.name) {
