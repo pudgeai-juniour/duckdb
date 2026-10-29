@@ -585,9 +585,11 @@ SchemaCatalogEntry &Binder::BindCreateFunctionInfo(CreateInfo &info) {
 			auto default_val = ExpressionExecutor::EvaluateScalar(context, *bound_default);
 
 			// Save this back as a constant expression
-			auto const_expr = ConstantExpression::FromValue(default_val);
-			const_expr->SetAlias(param_name);
-			it.second = std::move(const_expr);
+			if (!TypeVisitor::Contains(default_val.type(), [](const LogicalType &type) { return type.HasAlias(); })) {
+				auto const_expr = ConstantExpression::FromValue(default_val);
+				const_expr->SetAlias(param_name);
+				it.second = std::move(const_expr);
+			}
 			default_values[param_name] = std::move(default_val);
 		}
 
