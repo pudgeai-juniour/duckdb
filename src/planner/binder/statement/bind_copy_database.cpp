@@ -34,6 +34,12 @@ unique_ptr<LogicalOperator> Binder::BindCopyDatabaseSchema(Catalog &from_databas
 		if (entry.get().type == CatalogType::JOB_ENTRY) {
 			continue;
 		}
+		if (dependency_manager) {
+			auto owner = dependency_manager->OwnerOf(transaction, entry);
+			if (owner && PhysicalExport::CreatedByOwner(*owner, entry)) {
+				continue;
+			}
+		}
 		auto create_info = entry.get().GetInfo();
 		// re-root the entry (keeping its possibly nested schema path) in the target database
 		create_info->SetQualifiedName(create_info->GetQualifiedName().WithCatalog(target_database_name));
