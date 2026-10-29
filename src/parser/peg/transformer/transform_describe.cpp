@@ -230,7 +230,7 @@ DescribeTarget PEGTransformerFactory::TransformDescribeBaseTableName(PEGTransfor
 	return result;
 }
 
-// ShowAliasedSetting <- ShowOrDescribe ShowSettingAlias
+// ShowAliasedSetting <- ShowRule ShowSettingAlias
 // ShowSettingAlias  <- ('TRANSACTION' 'ISOLATION' 'LEVEL') / ('SESSION' 'AUTHORIZATION') / ('TIME' 'ZONE')
 unique_ptr<QueryNode> PEGTransformerFactory::TransformShowAliasedSetting(PEGTransformer &transformer,
                                                                          ParseResult &parse_result) {
