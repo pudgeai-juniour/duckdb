@@ -1179,7 +1179,7 @@ void LogQueryPathSetting::OnSet(SettingCallbackInfo &info, Value &input) {
 		writer = nullptr;
 	}
 	writer = make_uniq<BufferedFileWriter>(FileSystem::GetFileSystem(*info.context), path,
-	                                       BufferedFileWriter::DEFAULT_OPEN_FLAGS);
+	                                       BufferedFileWriter::DEFAULT_OPEN_FLAGS | FileFlags::FILE_FLAGS_APPEND);
 }
 
 //===----------------------------------------------------------------------===//
