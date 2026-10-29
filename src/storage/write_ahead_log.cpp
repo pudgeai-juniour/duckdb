@@ -129,40 +129,35 @@ public:
 	    : database(database), stream(&target), memory_stream(Allocator::Get(database)) {
 		if (!database.GetCatalog().Cast<DuckCatalog>().GetIsEncrypted()) {
 			direct = &target;
-			header_offset = target.GetPosition();
 			target.Write<uint64_t>(0);
 			target.Write<uint64_t>(0);
+			payload = &target;
+			payload_start = target.GetPosition();
 		}
 	}
 
 	void WriteData(const_data_ptr_t buffer, idx_t write_size) override {
-		if (direct) {
-			direct->WriteData(buffer, write_size);
-			return;
-		}
-		// buffer data into the memory stream
-		memory_stream.WriteData(buffer, write_size);
+		payload->WriteData(buffer, write_size);
 	}
 
 	idx_t PayloadSize() const {
-		return direct ? direct->GetPosition() - header_offset - 2 * sizeof(uint64_t) : memory_stream.GetPosition();
+		return payload->GetPosition() - payload_start;
 	}
 
 	data_ptr_t ReserveAligned(idx_t size, idx_t alignment) {
-		auto &payload = direct ? *direct : memory_stream;
 		const auto position = PayloadSize();
 		const auto padding = AlignValue<idx_t>(position, alignment) - position;
-		payload.GrowCapacity(padding + size);
-		auto bytes = payload.GetData() + payload.GetPosition();
+		payload->GrowCapacity(padding + size);
+		auto bytes = payload->GetData() + payload->GetPosition();
 		memset(bytes, 0, padding);
-		payload.SetPosition(payload.GetPosition() + padding + size);
+		payload->SetPosition(payload->GetPosition() + padding + size);
 		return bytes + padding;
 	}
 
 	void Flush() {
 		if (direct) {
-			auto header = direct->GetData() + header_offset;
-			auto body = header + 2 * sizeof(uint64_t);
+			auto body = direct->GetData() + payload_start;
+			auto header = body - 2 * sizeof(uint64_t);
 			uint64_t size = PayloadSize();
 			Store<uint64_t>(size, header);
 			Store<uint64_t>(Checksum(body, size), header + sizeof(uint64_t));
@@ -260,7 +255,8 @@ private:
 	optional_ptr<WriteStream> stream;
 	MemoryStream memory_stream;
 	optional_ptr<MemoryStream> direct;
-	idx_t header_offset = 0;
+	MemoryStream *payload = &memory_stream;
+	idx_t payload_start = 0;
 };
 
 class WriteAheadLogSerializer {

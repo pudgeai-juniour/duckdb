@@ -2210,6 +2210,7 @@ std::span<const data_t> WriteAheadLogDeserializer::ReadBitmap(const field_id_t s
 }
 
 void WriteAheadLogDeserializer::ReplayDeleteRowPositions() {
+	D_ASSERT(!DeserializeOnly());
 	vector<WALFrozenRowPositionGroup> groups;
 	deserializer.ReadList(101, "groups", [&](Deserializer::List &list, idx_t) {
 		list.ReadObject([&](Deserializer &object) {
@@ -2218,15 +2219,13 @@ void WriteAheadLogDeserializer::ReplayDeleteRowPositions() {
 			group.docs = ReadBitmap(101, 102, "docs");
 		});
 	});
-	if (DeserializeOnly()) {
-		return;
-	}
 	if (auto log = LogTable("row position delete")) {
 		log->ReplayDeleteRowPositions(data, groups);
 	}
 }
 
 void WriteAheadLogDeserializer::ReplayRowPositionMaps() {
+	D_ASSERT(!DeserializeOnly());
 	const auto source = deserializer.ReadProperty<uint64_t>(101, "source");
 	vector<WALFrozenRowPositionMap> maps;
 	deserializer.ReadList(102, "maps", [&](Deserializer::List &list, idx_t) {
@@ -2239,9 +2238,6 @@ void WriteAheadLogDeserializer::ReplayRowPositionMaps() {
 			map.mask = ReadBitmap(104, 105, "mask");
 		});
 	});
-	if (DeserializeOnly()) {
-		return;
-	}
 	if (auto log = LogTable("row position maps")) {
 		log->ReplayRowPositionMaps(data, source, maps);
 	}
