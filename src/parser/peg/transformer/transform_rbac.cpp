@@ -121,7 +121,7 @@ int32_t TransformOptionBool(ParseResult &option_list, idx_t bool_child) {
 string TransformGrantee(PEGTransformer &transformer, ParseResult &grantee_list) {
 	auto &chosen = grantee_list.Cast<ListParseResult>().Child<ChoiceParseResult>(0).GetResult();
 	if (chosen.type == ParseResultType::KEYWORD) {
-		return "PUBLIC";
+		return "public";
 	}
 	return transformer.Transform<string>(chosen);
 }
@@ -347,7 +347,7 @@ std::pair<bool, string> OptionalPolicyExpr(PEGTransformer &transformer, ParseRes
 
 // PolicyToRoles? at `child`: 'TO' List(Grantee). Empty (absent) -> PUBLIC, which
 // the command layer encodes as the empty role set. Each grantee is a role name
-// or the literal "PUBLIC".
+// or "public".
 unique_ptr<ParsedExpression> OptionalPolicyRoles(PEGTransformer &transformer, ParseResult &list, idx_t child) {
 	vector<Value> roles;
 	auto &opt = list.Cast<ListParseResult>().Child<OptionalParseResult>(child);
