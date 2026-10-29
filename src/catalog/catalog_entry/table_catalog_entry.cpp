@@ -499,6 +499,13 @@ bool TableCatalogEntry::HasPrimaryKey() const {
 	return GetPrimaryKey() != nullptr;
 }
 
+void TableCatalogEntry::VerifySequenceChange(const CatalogEntry &sequence) const {
+	if (NumbersRowsWith(sequence)) {
+		throw DependencyException("Cannot change sequence \"%s\": table \"%s\" numbers its rows with it",
+		                          sequence.name.GetIdentifierName(), name.GetIdentifierName());
+	}
+}
+
 LogicalType TableCatalogEntry::GetExpectedTypeForInsert(const ColumnDefinition &column) const {
 	return column.Type();
 }

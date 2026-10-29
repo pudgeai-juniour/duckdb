@@ -145,6 +145,7 @@ public:
 	virtual bool NumbersRowsWith(const CatalogEntry &sequence) const {
 		return false;
 	}
+	void VerifySequenceChange(const CatalogEntry &sequence) const;
 
 	DUCKDB_API static string ColumnsToSQL(const ColumnList &columns, const vector<unique_ptr<Constraint>> &constraints);
 

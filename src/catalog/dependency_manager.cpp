@@ -1376,6 +1376,10 @@ void DependencyManager::AlterObject(CatalogTransaction transaction, CatalogEntry
 		}
 		case AlterType::ALTER_SEQUENCE: {
 			if (alter_info.Cast<AlterSequenceInfo>().alter_sequence_type == AlterSequenceType::RESTART_SEQUENCE) {
+				auto dependent = LookupEntry(transaction, dep);
+				if (dependent && dependent->type == CatalogType::TABLE_ENTRY) {
+					dependent->Cast<TableCatalogEntry>().VerifySequenceChange(old_obj);
+				}
 				disallow_alter = false;
 			}
 			break;
