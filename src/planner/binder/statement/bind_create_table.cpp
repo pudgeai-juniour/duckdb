@@ -168,12 +168,12 @@ vector<unique_ptr<BoundConstraint>> Binder::BindNewConstraints(BoundCreateTableI
 
 unique_ptr<BoundConstraint> BindCheckConstraint(Binder &binder, const Constraint &constraint, const Identifier &table,
                                                 const ColumnList &columns) {
-	auto bound_constraint = make_uniq<BoundCheckConstraint>();
+	auto &check = constraint.Cast<CheckConstraint>();
+	auto bound_constraint = make_uniq<BoundCheckConstraint>(check);
 	auto &bound_check = bound_constraint->Cast<BoundCheckConstraint>();
 
 	// Bind the CHECK expression.
 	CheckBinder check_binder(binder, binder.context, table, columns, bound_check.bound_columns);
-	auto &check = constraint.Cast<CheckConstraint>();
 
 	// Create a copy of the unbound expression because binding can invalidate it.
 	auto check_copy = check.expression->Copy();

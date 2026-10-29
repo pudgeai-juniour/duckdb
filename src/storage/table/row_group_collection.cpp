@@ -2470,8 +2470,8 @@ void RowGroupCollection::VerifyNewConstraint(const QueryContext &context, DuckTr
 			for (auto entry : result.Values<int32_t>()) {
 				if (entry.IsValid() && entry.GetValue() == 0) {
 					auto table = VisibleTable(client, *info);
-					throw ConstraintException("CHECK constraint failed on table %s with expression CHECK(%s)",
-					                          table ? table->name : info->GetTableName(), check.expression->ToString());
+					throw ConstraintException("CHECK constraint failed on table %s with expression %s",
+					                          table ? table->name : info->GetTableName(), check.source.ToString());
 				}
 			}
 		}
