@@ -1151,9 +1151,10 @@ BoundStatement Binder::Bind(CreateStatement &stmt) {
 			// dispatching on that scanned table would build the index in the
 			// store catalog and skip the owning catalog's index routing. Resolve
 			// the named entry so dispatch lands on the catalog that owns it.
-			EntryLookupInfo table_lookup(CatalogType::TABLE_ENTRY,
-			                             create_index_info.GetQualifiedName().WithName(create_index_info.table));
-			auto resolved = Catalog::GetEntry(context, table_lookup, OnEntryNotFound::RETURN_NULL);
+			EntryLookupInfo table_lookup(
+			    CatalogType::TABLE_ENTRY,
+			    BindTableName(create_index_info.GetQualifiedName().WithName(create_index_info.table)));
+			auto resolved = EntryRetriever().GetEntry(table_lookup, OnEntryNotFound::RETURN_NULL);
 			if (resolved) {
 				table_ptr = resolved->type == CatalogType::TABLE_ENTRY ? &resolved->Cast<TableCatalogEntry>() : nullptr;
 			} else if (table_ptr->name != create_index_info.table) {
@@ -1168,8 +1169,10 @@ BoundStatement Binder::Bind(CreateStatement &stmt) {
 			properties.RegisterDBModify(table.catalog, context, DatabaseModificationType::CREATE_INDEX);
 			result.plan = table.catalog.BindCreateIndex(*this, stmt, table, std::move(plan));
 		} else {
-			auto &view = Catalog::GetEntry<ViewCatalogEntry>(
-			    context, create_index_info.GetQualifiedName().WithName(create_index_info.table));
+			EntryLookupInfo view_lookup(
+			    CatalogType::VIEW_ENTRY,
+			    BindTableName(create_index_info.GetQualifiedName().WithName(create_index_info.table)));
+			auto &view = EntryRetriever().GetEntry(view_lookup)->Cast<ViewCatalogEntry>();
 			properties.RegisterDBModify(view.catalog, context, DatabaseModificationType::CREATE_INDEX);
 			result.plan = view.catalog.BindCreateViewIndex(*this, stmt, view, std::move(plan));
 		}
