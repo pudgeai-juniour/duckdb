@@ -63,7 +63,8 @@ bool RowGroupPruner::TryOptimize(LogicalOperator &op) const {
 		}
 		if (op_type == LogicalOperatorType::LOGICAL_FILTER ||
 		    op_type == LogicalOperatorType::LOGICAL_AGGREGATE_AND_GROUP_BY ||
-		    op_type == LogicalOperatorType::LOGICAL_DISTINCT) {
+		    op_type == LogicalOperatorType::LOGICAL_DISTINCT || op_type == LogicalOperatorType::LOGICAL_UNNEST ||
+		    op_type == LogicalOperatorType::LOGICAL_SAMPLE) {
 			row_limit.SetInvalid();
 			row_offset.SetInvalid();
 			push_limit = false;
