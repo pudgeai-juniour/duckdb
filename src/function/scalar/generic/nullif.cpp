@@ -1,5 +1,7 @@
 #include "duckdb/function/scalar/generic_functions.hpp"
 
+#include "duckdb/common/vector/array_vector.hpp"
+#include "duckdb/common/vector/struct_vector.hpp"
 #include "duckdb/common/vector_operations/vector_operations.hpp"
 #include "duckdb/execution/expression_executor.hpp"
 #include "duckdb/planner/expression/bound_comparison_expression.hpp"
@@ -71,6 +73,23 @@ unique_ptr<FunctionData> NullIfBind(BindScalarFunctionInput &input) {
 	return make_uniq<NullIfBindData>(std::move(collation));
 }
 
+void OwnValidity(Vector &vector, idx_t count) {
+	auto &validity = FlatVector::ValidityMutable(vector);
+	validity.Copy(validity, count);
+	switch (vector.GetType().InternalType()) {
+	case PhysicalType::STRUCT:
+		for (auto &child : StructVector::GetEntries(vector)) {
+			OwnValidity(child, count);
+		}
+		break;
+	case PhysicalType::ARRAY:
+		OwnValidity(ArrayVector::GetChildMutable(vector), count * ArrayType::GetSize(vector.GetType()));
+		break;
+	default:
+		break;
+	}
+}
+
 void NullIfFunction(DataChunk &args, ExpressionState &state, Vector &result) {
 	const auto count = args.size();
 	auto &value = args.data[0];
@@ -96,18 +115,17 @@ void NullIfFunction(DataChunk &args, ExpressionState &state, Vector &result) {
 		ConstantVector::SetNull(result, count_t(count));
 		return;
 	}
+	value.Flatten(count);
+	result.Slice(value, 0, count);
+	OwnValidity(result, count);
 	const auto physical_type = value.GetType().InternalType();
 	if (physical_type == PhysicalType::STRUCT || physical_type == PhysicalType::ARRAY) {
-		VectorOperations::Copy(value, result, count, 0, 0);
 		for (idx_t i = 0; i < equal_count; i++) {
 			FlatVector::SetNull(result, equal.get_index(i), true);
 		}
 		return;
 	}
-	value.Flatten(count);
-	result.Slice(value, 0, count);
 	auto &validity = FlatVector::ValidityMutable(result);
-	validity.Copy(FlatVector::Validity(value), count);
 	for (idx_t i = 0; i < equal_count; i++) {
 		validity.SetInvalid(equal.get_index(i));
 	}
