@@ -161,7 +161,7 @@ static string SequenceSetval(const CreateSequenceInfo &info, const QualifiedName
 	       (is_called ? "true" : "false") + ");\n";
 }
 
-bool PhysicalExport::CreatedByOwner(CatalogEntry &owner, CatalogEntry &owned) {
+static bool CreatedByOwner(CatalogEntry &owner, CatalogEntry &owned) {
 	return owned.type == CatalogType::JOB_ENTRY;
 }
 
@@ -225,7 +225,7 @@ static void WriteOwnedEntries(stringstream &ss, DependencyManager &dependencies,
 	for (auto &owned : dependencies.OwnedEntries(transaction, owner)) {
 		if (owned.get().type == CatalogType::JOB_ENTRY) {
 			WriteJobState(ss, owner, owned);
-		} else if (owner.type == CatalogType::TABLE_ENTRY && !PhysicalExport::CreatedByOwner(owner, owned)) {
+		} else if (owner.type == CatalogType::TABLE_ENTRY && !CreatedByOwner(owner, owned)) {
 			WriteOwnedBy(ss, transaction, owner.Cast<TableCatalogEntry>(), owned);
 		}
 	}
@@ -246,7 +246,7 @@ static void WriteCatalogEntries(stringstream &ss, CatalogTransaction transaction
 		}
 		if (dependencies) {
 			auto owner = dependencies->OwnerOf(transaction, entry);
-			if (owner && PhysicalExport::CreatedByOwner(*owner, entry)) {
+			if (owner && CreatedByOwner(*owner, entry)) {
 				continue;
 			}
 		}

@@ -60,7 +60,6 @@ public:
 	static void ExtractEntries(ClientContext &context, vector<reference<SchemaCatalogEntry>> &schemas,
 	                           ExportEntries &result);
 	static catalog_entry_vector_t GetNaiveExportOrder(ClientContext &context, Catalog &catalog);
-	static bool CreatedByOwner(CatalogEntry &owner, CatalogEntry &owned);
 
 public:
 	// Sink interface
